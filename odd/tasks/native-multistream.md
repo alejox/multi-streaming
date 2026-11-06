@@ -64,8 +64,8 @@ Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Video
 - [ ] T1 Scaffold: buildable plugin with pinned OBS 33.0.1, core test target, and proof it loads in OBS. Route: delegated (preparation trigger, 2+ files). Commit `4773b63`. Build and install done; runtime load proof pending because OBS was already running.
 - [x] T2 Destinations core: model, validation, config codec, reconnect policy, stats math, session state (test-first). Route: delegated (same writer). Commit `56b8ddc`.
 - [x] T3 Secrets and persistence: `SecretStore` port, Keychain adapter, config file repository with no keys in JSON (test-first). Route: delegated (same writer). Commit `669e6ed`.
-- [ ] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated.
-- [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated.
+- [ ] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Status: compiled, runtime proof pending. Commit `7c0e412`.
+- [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: compiled, runtime proof pending. Commit `6d1461f`.
 - [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated.
 - [ ] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: delegated.
 
@@ -92,7 +92,7 @@ Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Video
 
 ## Progress
 
-Branch `feat/native-multistream`. T2 and T3 are complete. T1 is built and installed, and its load proof is still pending.
+Branch `feat/native-multistream`. T2 and T3 are complete. T1 is built and installed, and its load proof is still pending. T4 and T5 are compiled, not installed, and have never run inside OBS.
 
 Build decisions:
 
@@ -104,9 +104,22 @@ Build decisions:
 
 Findings for T4 to T6:
 
-- `obs_output_set_reconnect_settings(output, retry_count, retry_sec)` is the only libobs reconnect setter. The 15-minute cap and the factor of about 1.5 are hard-coded (`obs-output.c`), so `ReconnectPolicy::max_delay_seconds` below 900 is not enforced by libobs. T4 must enforce it or the setting must be dropped.
+- `obs_output_set_reconnect_settings(output, retry_count, retry_sec)` is the only libobs reconnect setter. The 15-minute cap and the factor of about 1.5 are hard-coded (`obs-output.c`), so `ReconnectPolicy::max_delay_seconds` was removed in T4. Older configs still load; the field disappears on the next save.
 - `group_by_encoder` groups video encoders only. Audio encoders are per track, so T4 has to share them separately using `Destination::audio_track`.
 - `obs_frontend_add_canvas`, `obs_canvas_reset_video`, and `obs_canvas_get_video` are exported by the OBS.app binaries; declarations are in the 33.0.1 headers. They have not been called yet.
+
+Engine decisions from T4 and T5, verified against the 33.0.1 sources:
+
+- `obs_output_stop` does nothing while an RTMP output is connecting, because it is not `active` yet. The engine keeps the session in `Stopping` and issues the stop on the `start` signal. A force stop would work at once, but it joins the connect thread, which would freeze the UI.
+- `obs_video_encoder_create` with an unknown id returns a placeholder instead of null, so ids are checked with `obs_get_encoder_codec` first.
+- `obs_encoder_get_settings` is passed by reference into new encoders, so a Share clone copies main's settings.
+- Outputs stop on `SCRIPTING_SHUTDOWN`. The event callback is removed on `EXIT`, because the frontend API is destroyed right after it and well before `obs_module_unload`.
+- `PROFILE_CHANGING` force-stops and releases everything synchronously, because the new profile resets video. Nothing restarts automatically. Destinations are global, not per profile.
+- A main stream that fails to start skips `STOPPING`, so sync destinations also stop on `STOPPED`.
+- The `STARTING` event fires before main's output is active, so sync destinations never reuse main's encoders: they get a dedicated encoder cloned from main's settings, which costs one more VideoToolbox session. Destinations started by hand while main is live do reuse them.
+- `enabled` only decides membership in Start all and sync. An explicit row start still works.
+- A missing stream key fails the start with a visible reason instead of connecting with an empty key.
+- Dedicated audio uses AAC at a fixed 160 kbps, since the model has no audio bitrate field. Core validation messages are English strings from the core, not `en-US.ini` entries.
 
 ## Verification evidence
 
@@ -119,6 +132,14 @@ Findings for T4 to T6:
 - `cmake --install build_macos --config RelWithDebInfo`: installed to the plugins directory, signature verifies, and the other three plugins are unchanged by modification time.
 - Not verified: the plugin has not run inside OBS. `pgrep -x OBS` found a running OBS for the whole session, so it was neither launched nor quit. The installed plugin will load on the next OBS launch.
 
+- T4 RED, assertion level: 2 of 12 `config_codec_test` cases failed before removing `max_delay_seconds`; with stubs, `encoder_plan_test` failed 13 of 14, `encoder_leases_test` 3 of 4, and `session_selection_test` 5 of 5. GREEN after implementation.
+- T5 RED, assertion level: with a stub, `destination_editing_test` failed 7 of 8. GREEN after implementation.
+- `cmake -S tests -B <fresh dir>`, build, and `ctest --output-on-failure`: 16 of 16 passed, with no compiler warnings.
+- `cmake --preset macos` and `cmake --build --preset macos`: BUILD SUCCEEDED, with warnings treated as errors.
+- `rg` over `src`: no log call mentions a key, secret, URL, or server. The only write of the key outside `SecretStore` is `obs_data_set_string(service_settings, "key", ...)`. `config_codec.cpp` and `file_config_repository.cpp` contain no key field.
+- Exception to test-first: `src/streaming` and `src/dock` have no runnable deterministic test, because they need a running OBS and Qt. Their decision logic was extracted into tested core code.
+- Not verified: no engine or dock code has run inside OBS. OBS stayed running for this session, and nothing was installed.
+
 ## Next step
 
-Prove the T1 load: with OBS closed by the user, launch it, read the newest log for `[obs-multi-stream] loaded version`, quit it cleanly, and check off T1. Then T4.
+With OBS closed by the user: install the build, launch OBS, prove the T1 load, then run the T4 and T5 runtime checks against a local RTMP sink. Check off T1, T4, and T5 only on observed behavior. Then T6.
