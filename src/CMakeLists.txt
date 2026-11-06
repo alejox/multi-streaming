@@ -14,6 +14,7 @@ add_library(
   STATIC
   destinations/config_codec.cpp
   destinations/destination.cpp
+  destinations/destination_editing.cpp
   destinations/destination_removal.cpp
   destinations/encoder_groups.cpp
   destinations/encoder_leases.cpp

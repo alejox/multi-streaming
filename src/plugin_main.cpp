@@ -19,6 +19,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 // Composition root: wires the core to its OBS, Qt, and Keychain adapters.
 
 #include "destinations/runtime_requirements.hpp"
+#include "dock/destinations_dock.hpp"
+#include "dock/dock_controller.hpp"
 #include "persistence/file_config_repository.hpp"
 #include "secrets/platform_secret_store.hpp"
 #include "streaming/streaming_engine.hpp"
@@ -40,8 +42,10 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 namespace {
 
-// Members are destroyed in reverse order: the Dispatcher's target goes first and drops
-// queued work, then the engine, which must not run that work anymore.
+constexpr const char *kDockId = "obs-multi-stream-destinations";
+
+// Members are destroyed in reverse order: the controller stops listening, the
+// Dispatcher's target drops queued work, and only then the engine goes.
 struct Composition {
 	explicit Composition(const std::string &config_path)
 		: repository(config_path),
@@ -57,6 +61,7 @@ struct Composition {
 	multistream::MainMixVideoSources video_sources;
 	multistream::StreamingEngine engine;
 	QObject dispatch_target;
+	std::unique_ptr<multistream::DockController> controller;
 };
 
 std::unique_ptr<Composition> composition;
@@ -129,7 +134,21 @@ void activate_features()
 		obs_log(LOG_ERROR, "%s", load.problem->c_str());
 	}
 	obs_log(LOG_INFO, "loaded %zu destinations", load.config.destinations.size());
-	composition->engine.set_destinations(std::move(load.config.destinations));
+
+	// OBS owns the dock once it accepts it, and destroys it with the main window.
+	auto *dock = new multistream::DestinationsDock();
+	if (!obs_frontend_add_dock_by_id(kDockId, obs_module_text("MultiStream"), dock)) {
+		obs_log(LOG_ERROR, "could not add the destinations dock");
+		delete dock;
+		composition->engine.set_destinations(std::move(load.config.destinations));
+	} else {
+		if (load.problem) {
+			dock->show_problem(QString::fromStdString(*load.problem));
+		}
+		composition->controller = std::make_unique<multistream::DockController>(
+			std::move(load.config), composition->repository, *composition->secrets, composition->engine,
+			dock);
+	}
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 }

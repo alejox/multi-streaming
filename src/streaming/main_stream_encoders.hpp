@@ -8,6 +8,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace multistream {
 
@@ -29,5 +30,13 @@ struct EncoderSpec {
 // encoder when one exists and otherwise from the current profile.
 std::optional<EncoderSpec> video_encoder_spec(const EncoderPreference &preference, obs_encoder_t *main_video);
 std::optional<EncoderSpec> audio_encoder_spec();
+
+struct VideoEncoderOption {
+	std::string id;
+	std::string display_name;
+};
+
+// The video encoders a destination can pick: general use, with a codec RTMP can carry.
+std::vector<VideoEncoderOption> available_video_encoders();
 
 } // namespace multistream

@@ -36,6 +36,9 @@ set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON AUTOUIC ON AUT
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
+    src/dock/destination_editor_dialog.cpp
+    src/dock/destinations_dock.cpp
+    src/dock/dock_controller.cpp
     src/plugin_main.cpp
     src/streaming/main_stream_encoders.cpp
     src/streaming/streaming_engine.cpp

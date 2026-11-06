@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <vector>
 
 namespace multistream {
 namespace {
@@ -39,23 +38,16 @@ OBSData cbr_settings(int bitrate_kbps)
 std::optional<std::string> default_video_encoder_id()
 {
 	std::vector<std::string> candidates;
-	const char *id = nullptr;
-	for (size_t index = 0; obs_enum_encoder_types(index, &id); ++index) {
-		const char *codec = obs_get_encoder_codec(id);
-		const bool hidden = (obs_get_encoder_caps(id) & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL)) != 0;
-		if (obs_get_encoder_type(id) == OBS_ENCODER_VIDEO && !hidden && codec != nullptr &&
-		    std::strcmp(codec, "h264") == 0) {
-			candidates.emplace_back(id);
+	for (const VideoEncoderOption &option : available_video_encoders()) {
+		if (std::strcmp(obs_get_encoder_codec(option.id.c_str()), "h264") == 0) {
+			candidates.push_back(option.id);
 		}
 	}
 
-	const auto preferred = [&](const char *fragment) {
-		return std::find_if(candidates.begin(), candidates.end(), [&](const std::string &candidate) {
+	for (const char *fragment : {"videotoolbox", "x264"}) {
+		const auto found = std::find_if(candidates.begin(), candidates.end(), [&](const std::string &candidate) {
 			return candidate.find(fragment) != std::string::npos;
 		});
-	};
-	for (const char *fragment : {"videotoolbox", "x264"}) {
-		const auto found = preferred(fragment);
 		if (found != candidates.end()) {
 			return *found;
 		}
@@ -143,6 +135,24 @@ std::optional<EncoderSpec> video_encoder_spec(const EncoderPreference &preferenc
 		return EncoderSpec{obs_encoder_get_id(main_video), settings};
 	}
 	return spec_from_profile();
+}
+
+std::vector<VideoEncoderOption> available_video_encoders()
+{
+	std::vector<VideoEncoderOption> options;
+	const char *id = nullptr;
+	for (size_t index = 0; obs_enum_encoder_types(index, &id); ++index) {
+		const char *codec = obs_get_encoder_codec(id);
+		const bool hidden = (obs_get_encoder_caps(id) & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL)) != 0;
+		if (hidden || obs_get_encoder_type(id) != OBS_ENCODER_VIDEO || codec == nullptr) {
+			continue;
+		}
+		if (std::strcmp(codec, "h264") == 0 || std::strcmp(codec, "hevc") == 0 || std::strcmp(codec, "av1") == 0) {
+			const char *display_name = obs_encoder_get_display_name(id);
+			options.push_back({id, display_name != nullptr ? display_name : id});
+		}
+	}
+	return options;
 }
 
 std::optional<EncoderSpec> audio_encoder_spec()
