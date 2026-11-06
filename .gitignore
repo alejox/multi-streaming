@@ -8,6 +8,7 @@
 !/src
 !/tests
 !/.clang-format
+!/.github
 !/.gitignore
 !/buildspec.json
 !/CMakeLists.txt

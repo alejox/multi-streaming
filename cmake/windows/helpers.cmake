@@ -24,7 +24,8 @@ function(set_target_properties_plugin target)
 
   target_install_resources(${target})
 
-  install(TARGETS ${target} RUNTIME DESTINATION .)
+  # The plugin is a MODULE library, which CMake installs as a LIBRARY artifact on every platform.
+  install(TARGETS ${target} LIBRARY DESTINATION .)
 endfunction()
 
 # target_install_resources: Install the data directory beside the plugin DLL

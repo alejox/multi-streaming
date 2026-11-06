@@ -2,7 +2,7 @@
 
 Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the system's secret store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), not in config files.
 
-> **Status: pre-release.** Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet. Windows and Linux packages are compiled and unit-tested in CI, and have never been run inside OBS. See [Verification status](#verification-status).
+> **Status: pre-release.** Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet. The Linux package is compiled and unit-tested in CI, the Windows package has not yet passed CI, and neither has been run inside OBS. See [Verification status](#verification-status).
 
 ## Quick path
 
@@ -66,7 +66,7 @@ The [Build workflow](.github/workflows/build.yml) produces one package per platf
 - Exit during a blocked Keychain read can report leaks.
 - Validation messages are English-only, and no UI translation exists beyond `en-US`.
 - The Canvas API is officially unstable in OBS 33.0.1. The build is pinned to that version, and other OBS versions are untested.
-- Only macOS arm64 has been run inside OBS. Windows x64 and Linux x86_64 are compile-tested only.
+- Only macOS arm64 has been run inside OBS. Linux x86_64 is compile-tested and unit-tested only, and Windows x64 has not yet passed CI.
 - The Linux package is built against OBS 32.2.0, an untested version for an unstable API. The functions the plugin calls from `obs.h` and `obs-frontend-api.h` have the same declarations in both versions, which says nothing about their behavior.
 - Where no secure store is available, saving a key fails loudly rather than falling back to plain text.
 
@@ -142,7 +142,8 @@ Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate buil
 | Metal renderer | **Not tested**; all runs used OpenGL |
 | Real Keychain prompt during start | **Not tested** |
 | Real streaming services | **Not tested**; local sinks only |
-| Windows and Linux in CI: compile and core tests | **Not yet run**; the workflow is new |
+| Linux in CI: compile, core tests, Secret Service test, package | Pass, against OBS 32.2.0 |
+| Windows in CI: compile, core tests, package | **Not yet passed** |
 | Windows and Linux inside OBS, including previews on X11 and Wayland | **Not tested** |
 
 ## License

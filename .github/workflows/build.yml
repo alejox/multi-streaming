@@ -26,7 +26,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .deps
-          key: deps-windows-x64-${{ hashFiles('buildspec.json', 'cmake/common/buildspec_common.cmake') }}
+          key: deps-windows-x64-${{ hashFiles('buildspec.json', 'cmake/common/buildspec_common.cmake', 'cmake/windows/buildspec.cmake') }}
 
       - name: Configure
         run: cmake --preset windows-x64

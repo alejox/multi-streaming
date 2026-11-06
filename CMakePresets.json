@@ -30,7 +30,7 @@
     {
       "name": "windows-x64",
       "displayName": "Windows x64",
-      "description": "Build for 64-bit Windows with Visual Studio 2022, matching OBS 33.0.1",
+      "description": "Build for 64-bit Windows with Visual Studio 2022, the MSVC 19.44 toolset that built obs-deps 2026-10-23",
       "binaryDir": "${sourceDir}/build_windows",
       "condition": {
         "type": "equals",
