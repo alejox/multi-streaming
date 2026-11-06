@@ -75,6 +75,7 @@ Isolated-instance technique, which leaves the user's running OBS alone:
 - [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: runs inside OBS and the engine behind it is proven, but the dock has no UI proof. Commit `6d1461f`.
 - [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated (2+ non-trivial files). Status: runtime proof partial, UI pending. Commit: the one recording this line.
 - [x] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: E2E delegated (commit `440b334` evidence); README inline (one passive file). Parent spot check: core tests 22 of 22 pass; default binary has no `e2e` string. Assessed tier: medium, RDD off.
+- [x] T8 Reconnect flapping and dock status: `ReconnectHistory` core (records drops, flags flapping after 3 within 2 min), engine status (`reconnect_attempt`, `flapping`), dock tone dots, "Reconnecting (attempt N)", flapping warning, platform icons, and a More-actions menu; the E2E hook learns to answer dialogs, probe the preview overlay, and grab docks. Commit `13c96df`. Verified on resume: core tests 27 of 27 pass; default and E2E builds succeed (the earlier macOS link failure was a stale build dir, fixed by re-running `cmake --preset macos`).
 
 ## Acceptance criteria
 
@@ -208,4 +209,4 @@ Removal residue, for T7 (observed with the plugin deleted from the isolated inst
 
 ## Next step
 
-A human UI check for T5 and T6, after deciding whether to install this build in the real OBS, because first load adds the canvas to the real scene collection. Engram mirror pending: auto mode could not review `mem_save` because a hook changes its input.
+Runtime E2E check for T8's dock and reconnect UI (isolated OBS with the E2E build): the flapping warning and attempt count on a destination whose sink drops every few seconds, and the More-actions menu driving Edit/Delete. Dock icons and tone dots are otherwise visual and were covered by the human UI check. Engram mirror pending: auto mode could not review `mem_save` because a hook changes its input.
