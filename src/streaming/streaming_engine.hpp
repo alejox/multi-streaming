@@ -1,16 +1,22 @@
 // Runs one obs_output_t per destination next to OBS's own stream.
 //
-// Threading: every public method runs on the UI thread, which alone owns outputs,
-// services, and encoders. libobs signals arrive on other threads; they only update a
-// session under its mutex and hand the rest to the Dispatcher. A signal callback never
+// Threading: every public method runs on the UI thread, which alone decides what happens
+// to outputs, services, and encoders. libobs signals arrive on other threads; they only
+// update state under a mutex and hand the rest to the Dispatcher. A signal callback never
 // touches an output, because releasing one there could join the thread running it.
 //
-// Lifetime: signals are disconnected before an output is released, without holding a
-// session mutex, since signal_handler_disconnect waits for a running callback. After
-// that, no callback can reach the slot. The owner destroys the Dispatcher's target
-// before the engine, so that no queued work outlives it.
+// Stopping and destroying an output can join the threads of its RTMP stream, which can
+// block for a long time and, while its connect thread runs, forever (see ConnectGate). So
+// the UI thread only stops an output when the gate is clear, and never destroys one: a
+// retired output goes to its own thread, which waits for the gate first.
+//
+// Lifetime: a retired output no longer reaches its slot, and its signals are disconnected
+// before it is released, without holding a mutex, since signal_handler_disconnect waits
+// for a running callback. The owner shuts the engine down before destroying the
+// Dispatcher's target, so that no worker can reach that target afterwards.
 #pragma once
 
+#include "destinations/deferred_work.hpp"
 #include "destinations/destination.hpp"
 #include "destinations/encoder_leases.hpp"
 #include "destinations/encoder_plan.hpp"
@@ -70,8 +76,9 @@ public:
 
 	void sample_stats();
 
-	// Force-stops and releases everything before returning, for a profile change, which
-	// resets video and needs all outputs gone.
+	// Force-stops and releases everything, for a profile change, which resets video and
+	// needs all outputs gone. Waits for that, though only for a few seconds: an output
+	// that is still connecting cannot be stopped until it stops connecting.
 	void stop_everything_now();
 
 	// Like stop_everything_now, and refuses later starts. Safe to call repeatedly.
@@ -79,6 +86,8 @@ public:
 
 private:
 	struct Slot;
+	struct OutputLink;
+	class WorkerChannel;
 
 	static void on_output_started(void *data, calldata_t *params);
 	static void on_output_stopped(void *data, calldata_t *params);
@@ -98,20 +107,19 @@ private:
 	void return_lease(std::string &key);
 
 	void fail_start(Slot &slot, const std::string &reason);
-	void connect_signals(Slot &slot);
-	void disconnect_signals(Slot &slot);
-	void release_resources(Slot &slot);
+	void issue_requested_stop(Slot &slot);
+	void retire_output(Slot &slot, bool force_stop);
 	void force_stop_and_release(Slot &slot);
 	void release_if_ended(Slot &slot);
 
 	// Callable from any thread.
-	void publish_later(const std::string &id);
+	static void publish_later(StreamingEngine &engine, const std::string &id);
 	void publish(Slot &slot);
 	static DestinationStatus status_of(const Slot &slot);
 
 	SecretStore &secrets_;
 	VideoSources &video_sources_;
-	Dispatcher dispatcher_;
+	std::shared_ptr<WorkerChannel> channel_;
 	StatusListener listener_;
 
 	std::vector<Destination> destinations_;
@@ -119,6 +127,8 @@ private:
 
 	EncoderLeases leases_;
 	std::map<std::string, OBSEncoder> encoders_;
+	DeferredWork retired_outputs_;
+	DeferredWork stop_waits_;
 	bool shut_down_ = false;
 };
 

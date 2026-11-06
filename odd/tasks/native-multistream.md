@@ -64,7 +64,7 @@ Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Video
 - [ ] T1 Scaffold: buildable plugin with pinned OBS 33.0.1, core test target, and proof it loads in OBS. Route: delegated (preparation trigger, 2+ files). Commit `4773b63`. Build and install done; runtime load proof pending because OBS was already running.
 - [x] T2 Destinations core: model, validation, config codec, reconnect policy, stats math, session state (test-first). Route: delegated (same writer). Commit `56b8ddc`.
 - [x] T3 Secrets and persistence: `SecretStore` port, Keychain adapter, config file repository with no keys in JSON (test-first). Route: delegated (same writer). Commit `669e6ed`.
-- [ ] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Status: compiled, runtime proof pending. Commit `7c0e412`.
+- [x] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Commit `7c0e412`; runtime defect D1 fixed in the commit recorded under D1.
 - [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: compiled, runtime proof pending. Commit `6d1461f`.
 - [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated.
 - [ ] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: delegated.
@@ -121,6 +121,15 @@ Engine decisions from T4 and T5, verified against the 33.0.1 sources:
 - A missing stream key fails the start with a visible reason instead of connecting with an empty key.
 - Dedicated audio uses AAC at a fixed 160 kbps, since the model has no audio bitrate field. Core validation messages are English strings from the core, not `en-US.ini` entries.
 
+D1, UI hang and crash when reconnect retries run out (cause proven, fixed):
+
+- The sample's `obs_output_destroy` calls `obs-outputs + 0x38dc0`, which `otool` shows follows `bl _pthread_join` at `0x38dbc`, loading `[x19+0x88]`, guarded by `ldrb [x19+0x80] == 1`. That is `rtmp-stream.c:111-112`, joining `connect_thread`. `obs-output.c` joins nothing on this path.
+- The connect thread fires the final `stop` signal at `rtmp-stream.c:1529`, then detaches itself at `:1533-1534`. Our queued release reached `rtmp_stream_destroy` first. On macOS a waiting join is never woken by that detach: `pthread_detach` clears `tl_join_ctx` without setting the exit gate, so `_pthread_terminate` wakes nobody (libpthread `pthread.c:1641`, `pthread_cancelable.c`). SIGTERM's EINTR then re-reads the gate in the freed thread struct: `pthread_join() state corruption`.
+- A standalone C program that detaches during a join blocks at the same `_pthread_join + 620` frame.
+- The same join is reachable from `rtmp_stream_stop` (`:210-211`), so any stop or destroy while a connect thread lives can hang, including `obs_output_force_stop` while reconnecting. libobs does not expose that thread's state.
+- Fix: `ConnectGate` tracks when the thread can be alive from output signals, and the known minimum delay before the next attempt. A stop waits for a clear gate. Destruction never runs on the UI thread: `DeferredWork` runs each retired output on its own thread after the gate clears, 1 s after the final signal.
+- Accepted limits: at a profile change or exit the UI waits up to 5 s for retired outputs. An output still connecting after that is left running and its leak reported. A peer that accepts TCP and never answers makes the OBS process itself wait for the 30 s RTMP timeout at exit (observed: exit 0 after 22 s, 2 leaks).
+
 ## Verification evidence
 
 - T1 RED: `cmake --build build_tests` failed on the missing `destinations/runtime_requirements.hpp`. GREEN after implementation.
@@ -139,6 +148,16 @@ Engine decisions from T4 and T5, verified against the 33.0.1 sources:
 - `rg` over `src`: no log call mentions a key, secret, URL, or server. The only write of the key outside `SecretStore` is `obs_data_set_string(service_settings, "key", ...)`. `config_codec.cpp` and `file_config_repository.cpp` contain no key field.
 - Exception to test-first: `src/streaming` and `src/dock` have no runnable deterministic test, because they need a running OBS and Qt. Their decision logic was extracted into tested core code.
 - Not verified: no engine or dock code has run inside OBS. OBS stayed running for this session, and nothing was installed.
+
+- Isolated OBS runs, all with a `MULTI_STREAM_E2E_SECRETS` build, no Keychain, and streaming started while the UI was idle through the command hook. Each main-thread `sample` shows no `_pthread_join` or `obs_output_destroy`:
+  - Retries out, 3 runs: sync destination with `max_retries: 2`, its sink killed while live. `failed` logged after 5.7 s, main and the other destination kept growing (0.8 to 1 MB in 4 s), exit 0 in about 0.2 s, `unloaded`, 0 leaks.
+  - Closed port, 3 runs: `failed` logged, others kept growing, exit 0, 0 leaks.
+  - Stop while reconnecting: `idle` 0.2 s after the stop, others kept growing, exit 0, 0 leaks.
+  - Exit with a destination live: `idle` logged, exit 0 in 0.23 s, 0 leaks, sink's `ffprobe` shows `h264,640,360` and `aac,48000`.
+  - Sync stop through `obs_frontend_streaming_stop`: `starting, live, stopping, idle`, exit 0, 0 leaks.
+  - Peer that never answers the handshake, stop then exit, and exit alone: UI not blocked, others kept growing, exit 0 after about 22 s, `left running` logged, 2 leaks.
+- `cmake --preset macos` and `cmake --build --preset macos`: BUILD SUCCEEDED, and the post-build check reports no end-to-end store in the binary.
+- D1 RED, assertion level: with stubs, `connect_gate_test` failed 8 of 11 and `deferred_work_test` 6 of 6. GREEN after implementation.
 
 ## Next step
 

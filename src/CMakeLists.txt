@@ -13,6 +13,8 @@ add_library(
   multistream_core
   STATIC
   destinations/config_codec.cpp
+  destinations/connect_gate.cpp
+  destinations/deferred_work.cpp
   destinations/destination.cpp
   destinations/destination_editing.cpp
   destinations/destination_removal.cpp
