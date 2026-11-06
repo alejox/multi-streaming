@@ -58,7 +58,7 @@ jobs:
           $package = "obs-multi-stream-$version-windows-x64.zip"
           cmake --install build_windows --config RelWithDebInfo --prefix stage/obs-multi-stream
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          cmake -DBINARY=stage/obs-multi-stream/obs-multi-stream.dll -P cmake/check_no_e2e_marker.cmake
+          cmake "-DBINARY=stage/obs-multi-stream/obs-multi-stream.dll" -P cmake/check_no_e2e_marker.cmake
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           @(
             "OBS Multi Stream $version for Windows x64, built against OBS 33.0.1."
