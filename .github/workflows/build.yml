@@ -1,0 +1,134 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - feat/native-multistream
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore OBS dependencies
+        id: restore-deps
+        uses: actions/cache/restore@v6
+        with:
+          path: .deps
+          key: deps-windows-x64-${{ hashFiles('buildspec.json', 'cmake/common/buildspec_common.cmake') }}
+
+      - name: Configure
+        run: cmake --preset windows-x64
+
+      # Saved right after configure, which builds libobs, so that a plugin compile error
+      # does not throw away the slowest step of the job.
+      - name: Save OBS dependencies
+        if: steps.restore-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .deps
+          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cmake --build --preset windows-x64
+
+      - name: Test
+        run: |
+          cmake -S tests -B build_tests -G "Visual Studio 17 2022" -A x64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build_tests --config RelWithDebInfo --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build_tests -C RelWithDebInfo --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Package
+        run: |
+          $version = (Get-Content buildspec.json -Raw | ConvertFrom-Json).version
+          $package = "obs-multi-stream-$version-windows-x64.zip"
+          cmake --install build_windows --config RelWithDebInfo --prefix stage/obs-multi-stream
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake -DBINARY=stage/obs-multi-stream/obs-multi-stream.dll -P cmake/check_no_e2e_marker.cmake
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          @(
+            "OBS Multi Stream $version for Windows x64, built against OBS 33.0.1."
+            "Close OBS, then extract the obs-multi-stream folder into:"
+            "  C:\ProgramData\obs-studio\plugins\"
+            "Stream keys are kept in the Windows Credential Manager."
+          ) | Set-Content stage/obs-multi-stream/INSTALL.txt
+          Compress-Archive -Path stage/obs-multi-stream -DestinationPath $package
+          "PACKAGE=$package" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: obs-multi-stream-windows-x64
+          path: ${{ env.PACKAGE }}
+          if-no-files-found: error
+
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # libobs and obs-frontend-api come from the OBS Project PPA, which only keeps its latest
+      # build, so the OBS version is whatever it publishes for this Ubuntu release. The
+      # Package step records that version in INSTALL.txt.
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository --yes ppa:obsproject/obs-studio
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            dbus gnome-keyring libsecret-1-dev libsimde-dev ninja-build obs-studio pkg-config qt6-base-dev
+          dpkg-query --show obs-studio
+
+      - name: Configure
+        run: cmake --preset linux-x86_64
+
+      - name: Build
+        run: cmake --build --preset linux-x86_64
+
+      - name: Test
+        run: |
+          cmake -S tests -B build_tests -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build_tests
+          # A private session bus and an unlocked throwaway keyring, so that the Secret Service
+          # test really runs. The variable turns its skip into a failure.
+          MULTI_STREAM_REQUIRE_SECRET_SERVICE=1 dbus-run-session -- bash -ec '
+            echo -n ci-only-keyring-password | gnome-keyring-daemon --unlock --components=secrets
+            ctest --test-dir build_tests --output-on-failure
+          '
+
+      - name: Package
+        run: |
+          version="$(jq -r .version buildspec.json)"
+          obs_version="$(dpkg-query --show --showformat='${Version}' obs-studio)"
+          package="obs-multi-stream-${version}-linux-x86_64.tar.gz"
+          cmake --install build_linux --prefix stage/obs-multi-stream
+          cmake -DBINARY=stage/obs-multi-stream/bin/64bit/obs-multi-stream.so -P cmake/check_no_e2e_marker.cmake
+          cat > stage/obs-multi-stream/INSTALL.txt <<EOF
+          OBS Multi Stream ${version} for Linux x86_64, built on Ubuntu 24.04 against OBS ${obs_version}.
+          Close OBS, then run:
+            mkdir -p ~/.config/obs-studio/plugins
+            tar -xzf ${package} -C ~/.config/obs-studio/plugins
+          Requires libsecret and a running Secret Service such as GNOME Keyring or KWallet.
+          Without one, stream keys cannot be saved; they are never kept in plain text.
+          EOF
+          tar -C stage -czf "${package}" obs-multi-stream
+          echo "PACKAGE=${package}" >> "${GITHUB_ENV}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: obs-multi-stream-linux-x86_64
+          path: ${{ env.PACKAGE }}
+          if-no-files-found: error

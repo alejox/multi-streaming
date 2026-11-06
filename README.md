@@ -1,10 +1,12 @@
 # OBS Multi Stream
 
-Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the macOS Keychain, not in config files.
+Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the system's secret store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), not in config files.
 
-> **Status: pre-release.** Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet. See [Verification status](#verification-status).
+> **Status: pre-release.** Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet. Windows and Linux packages are compiled and unit-tested in CI, and have never been run inside OBS. See [Verification status](#verification-status).
 
 ## Quick path
+
+This builds from source on macOS. For Windows and Linux, see [Packages](#packages).
 
 Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake.
 
@@ -21,6 +23,19 @@ Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake.
 4. Open **Docks > Vertical Canvas** if a destination uses the vertical source.
 
 > **First load changes your scene collection.** The plugin adds a canvas named `obs-multi-stream-vertical` to it, and removing the plugin does not remove that canvas. See [Uninstall](#uninstall).
+
+## Packages
+
+The [Build workflow](.github/workflows/build.yml) produces one package per platform, downloadable from the artifacts of its run. Each package also holds these steps as `INSTALL.txt`.
+
+| Platform | Built against | Install, with OBS closed |
+|----------|---------------|--------------------------|
+| Windows x64 | OBS 33.0.1 | Extract the `obs-multi-stream` folder into `C:\ProgramData\obs-studio\plugins\` |
+| Linux x86_64 | The OBS Project PPA for Ubuntu 24.04, 32.2.0 when this was written | `mkdir -p ~/.config/obs-studio/plugins`, then `tar -xzf <package> -C ~/.config/obs-studio/plugins` |
+
+- **Windows needs OBS 33 or later.** OBS refuses a plugin built against a newer libobs than its own.
+- **Linux needs glibc 2.39 and Qt 6.4 or later,** as on Ubuntu 24.04, plus libsecret. Without a running Secret Service such as GNOME Keyring or KWallet, stream keys cannot be saved.
+- **The Linux package is not built against OBS 33.0.1,** because the PPA has no OBS 33 for Ubuntu 24.04. See [Known limits](#known-limits).
 
 ## Features
 
@@ -51,7 +66,9 @@ Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake.
 - Exit during a blocked Keychain read can report leaks.
 - Validation messages are English-only, and no UI translation exists beyond `en-US`.
 - The Canvas API is officially unstable in OBS 33.0.1. The build is pinned to that version, and other OBS versions are untested.
-- Only macOS arm64 is supported. On other platforms the secret store fails loudly rather than falling back to plain text.
+- Only macOS arm64 has been run inside OBS. Windows x64 and Linux x86_64 are compile-tested only.
+- The Linux package is built against OBS 32.2.0, an untested version for an unstable API. The functions the plugin calls from `obs.h` and `obs-frontend-api.h` have the same declarations in both versions, which says nothing about their behavior.
+- Where no secure store is available, saving a key fails loudly rather than falling back to plain text.
 
 ## Uninstall
 
@@ -59,10 +76,10 @@ Removing the plugin leaves data behind. OBS still loads cleanly and the main str
 
 | Residue | Location | Cleanup |
 |---------|----------|---------|
-| Plugin | `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin` | Delete it |
-| Config | `~/Library/Application Support/obs-studio/plugin_config/obs-multi-stream/` | Delete it |
+| Plugin | macOS: `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin`<br>Windows: `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugins/obs-multi-stream/` | Delete it |
+| Config | macOS: `~/Library/Application Support/obs-studio/plugin_config/obs-multi-stream/`<br>Windows: `%APPDATA%\obs-studio\plugin_config\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugin_config/obs-multi-stream/` | Delete it |
 | Canvas and its scenes | Scene collection JSON: the `canvases[]` entry `obs-multi-stream-vertical` and the `sources` entries with its `canvas_uuid` | Back up the file first, then with OBS closed remove those entries |
-| Stream keys | Keychain service `com.alejox.obs-multi-stream` | Delete the items in Keychain Access |
+| Stream keys | macOS: Keychain service `com.alejox.obs-multi-stream`<br>Windows: Credential Manager targets starting `obs-multi-stream/`<br>Linux: Secret Service items with `service` = `com.alejox.obs-multi-stream` | Delete them in Keychain Access, Credential Manager, or Seahorse |
 
 The manual collection cleanup has been tested once.
 
@@ -74,7 +91,7 @@ The core has no OBS or Qt headers, so its rules are tested without running OBS.
 |------|------|
 | `src/destinations/` | Core: model, validation, codec, ports, stats, session state, encoder plan |
 | `src/persistence/` | Atomic config file repository |
-| `src/secrets/` | Keychain adapter and test stores |
+| `src/secrets/` | Keychain, Credential Manager and Secret Service adapters, and test stores |
 | `src/streaming/` | libobs outputs, services, encoders, main-stream sync |
 | `src/vertical_canvas/` | Canvas lifecycle, scenes, composition, render |
 | `src/dock/` | Qt docks and editor |
@@ -90,6 +107,24 @@ cmake -S tests -B build_tests
 cmake --build build_tests
 ctest --test-dir build_tests --output-on-failure
 ```
+
+### Build on Linux
+
+Linux builds against system packages rather than `buildspec.json`, so that the plugin links the libobs that OBS itself loads. On Ubuntu 24.04:
+
+```bash
+sudo add-apt-repository ppa:obsproject/obs-studio
+sudo apt-get update
+sudo apt-get install --no-install-recommends \
+  libsecret-1-dev libsimde-dev ninja-build obs-studio pkg-config qt6-base-dev
+cmake --preset linux-x86_64
+cmake --build --preset linux-x86_64
+cmake --install build_linux
+```
+
+The Secret Service test is skipped when no service is reachable. Set `MULTI_STREAM_REQUIRE_SECRET_SERVICE=1` to make that a failure, as CI does.
+
+### Runtime tests
 
 Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate build directory. It reads fake keys from a file and adds a test command hook. It is off by default, the code is excluded at compile time, and installing such a build fails on purpose.
 
@@ -107,6 +142,8 @@ Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate buil
 | Metal renderer | **Not tested**; all runs used OpenGL |
 | Real Keychain prompt during start | **Not tested** |
 | Real streaming services | **Not tested**; local sinks only |
+| Windows and Linux in CI: compile and core tests | **Not yet run**; the workflow is new |
+| Windows and Linux inside OBS, including previews on X11 and Wayland | **Not tested** |
 
 ## License
 
