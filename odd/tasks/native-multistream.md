@@ -42,7 +42,8 @@ src/
   destinations/      Pure core: Destination, validation, config codec, ports, reconnect policy, stats math, session state
   streaming/         libobs adapter: outputs, services, encoders, encoder sharing, main-stream sync
   vertical_canvas/   libobs adapter: canvas lifecycle, scenes, composition, render
-  secrets/           SecretStore implementations (Keychain, in-memory)
+  secrets/           SecretStore implementations (Keychain, in-memory, unavailable)
+  persistence/       ConfigRepository implementation (atomic JSON file)
   dock/              Qt UI: destinations dock, editor dialog, vertical preview
   plugin_main.cpp    Composition root
 tests/               Core tests through CTest, with no OBS or Qt dependency

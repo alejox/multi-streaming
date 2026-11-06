@@ -19,6 +19,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 // Composition root: wires the core to its OBS, Qt, and Keychain adapters.
 
 #include "destinations/runtime_requirements.hpp"
+#include "persistence/file_config_repository.hpp"
+#include "secrets/platform_secret_store.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -26,8 +28,51 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QtCore/qglobal.h>
 
+#include <memory>
+#include <optional>
+#include <string>
+
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
+
+namespace {
+
+struct Composition {
+	multistream::FileConfigRepository repository;
+	std::unique_ptr<multistream::SecretStore> secrets;
+	multistream::DestinationsConfig config;
+};
+
+std::optional<Composition> composition;
+
+std::string config_file_path()
+{
+	char *path = obs_module_config_path("destinations.json");
+	const std::string result = path != nullptr ? path : "";
+	bfree(path);
+	return result;
+}
+
+void activate_features()
+{
+	const std::string path = config_file_path();
+	if (path.empty()) {
+		obs_log(LOG_ERROR, "could not resolve the config path: features are disabled");
+		return;
+	}
+
+	composition.emplace(Composition{multistream::FileConfigRepository(path),
+					multistream::make_platform_secret_store(), {}});
+
+	multistream::ConfigLoad load = composition->repository.load();
+	if (load.problem) {
+		obs_log(LOG_ERROR, "%s", load.problem->c_str());
+	}
+	composition->config = std::move(load.config);
+	obs_log(LOG_INFO, "loaded %zu destinations", composition->config.destinations.size());
+}
+
+} // namespace
 
 bool obs_module_load(void)
 {
@@ -38,12 +83,15 @@ bool obs_module_load(void)
 	if (!multistream::is_runtime_supported(obs_get_version())) {
 		obs_log(LOG_WARNING, "OBS %s is older than the required 33.0: features are disabled",
 			obs_get_version_string());
+		return true;
 	}
 
+	activate_features();
 	return true;
 }
 
 void obs_module_unload(void)
 {
+	composition.reset();
 	obs_log(LOG_INFO, "unloaded");
 }

@@ -25,7 +25,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 target_link_libraries(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE multistream_core OBS::libobs OBS::obs-frontend-api Qt6::Core Qt6::Widgets
+  PRIVATE multistream_adapters OBS::libobs OBS::obs-frontend-api Qt6::Core Qt6::Widgets
 )
 target_compile_options(
   ${CMAKE_PROJECT_NAME}

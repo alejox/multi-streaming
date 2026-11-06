@@ -43,8 +43,8 @@ template<typename T> std::string describe(const T &value)
 
 #define CHECK_EQ(actual, expected)                                                                    \
 	do {                                                                                          \
-		const auto &check_actual = (actual);                                                  \
-		const auto &check_expected = (expected);                                              \
+		const auto check_actual = (actual);                                                  \
+		const auto check_expected = (expected);                                              \
 		if (!(check_actual == check_expected)) {                                              \
 			test_harness::record_failure(__FILE__, __LINE__,                              \
 						     std::string(#actual " == " #expected ": got ") + \
