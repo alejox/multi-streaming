@@ -29,13 +29,13 @@ std::optional<std::string> save_vertical_settings(const std::filesystem::path &p
 		file << encode_vertical_settings(settings);
 		file.flush();
 		if (!file) {
-			return "Could not write " + temp_path.string();
+			return "Could not write " + temp_path.u8string();
 		}
 	}
 
 	std::filesystem::rename(temp_path, path, error);
 	if (error) {
-		return "Could not replace " + path.string() + ": " + error.message();
+		return "Could not replace " + path.u8string() + ": " + error.message();
 	}
 	return std::nullopt;
 }

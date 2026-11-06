@@ -42,6 +42,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QObject>
 #include <QtCore/qglobal.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -53,6 +54,8 @@ namespace {
 constexpr const char *kDockId = "obs-multi-stream-destinations";
 constexpr const char *kVerticalDockId = "obs-multi-stream-vertical";
 
+// In UTF-8, as libobs returns it. Convert with u8path: on Windows a std::filesystem::path
+// built from a plain string assumes the system code page instead.
 std::string module_config_path(const char *file)
 {
 	char *path = obs_module_config_path(file);
@@ -85,9 +88,9 @@ std::unique_ptr<multistream::SecretStore> make_secret_store()
 // Dispatcher's target drops queued work, and only then the engine goes.
 struct Composition {
 	explicit Composition(const std::string &config_path)
-		: repository(config_path),
+		: repository(std::filesystem::u8path(config_path)),
 		  secrets(make_secret_store()),
-		  vertical(module_config_path("vertical.json")),
+		  vertical(std::filesystem::u8path(module_config_path("vertical.json"))),
 		  engine(secrets, vertical, [this](std::function<void()> work) {
 			  QMetaObject::invokeMethod(&dispatch_target, std::move(work), Qt::QueuedConnection);
 		  })

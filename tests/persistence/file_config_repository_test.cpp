@@ -3,14 +3,19 @@
 #include "destinations/config_codec.hpp"
 #include "test_harness.hpp"
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace multistream;
@@ -22,9 +27,16 @@ class TempDirectory {
 public:
 	TempDirectory()
 	{
-		std::string pattern = (fs::temp_directory_path() / "multistream-test-XXXXXX").string();
-		REQUIRE(mkdtemp(pattern.data()) != nullptr);
-		path_ = pattern;
+		std::random_device random;
+		for (int attempt = 0; attempt < 100 && path_.empty(); ++attempt) {
+			const fs::path candidate =
+				fs::temp_directory_path() / ("multistream-test-" + std::to_string(random()));
+			std::error_code error;
+			if (fs::create_directory(candidate, error)) {
+				path_ = candidate;
+			}
+		}
+		REQUIRE(!path_.empty());
 	}
 	~TempDirectory()
 	{
@@ -36,6 +48,42 @@ public:
 
 private:
 	fs::path path_;
+};
+
+// While alive, makes moving or replacing the file in the directory fail. Directory
+// permissions do that on POSIX. They do nothing on Windows, where an open handle that does
+// not share delete access does it instead.
+class ReplacementBlock {
+public:
+#if defined(_WIN32)
+	ReplacementBlock(const fs::path &, const fs::path &file)
+		: handle_(CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+				      FILE_ATTRIBUTE_NORMAL, nullptr))
+	{
+		REQUIRE(handle_ != INVALID_HANDLE_VALUE);
+	}
+	~ReplacementBlock() { CloseHandle(handle_); }
+
+	static bool is_possible() { return true; }
+#else
+	ReplacementBlock(const fs::path &directory, const fs::path &) : directory_(directory)
+	{
+		fs::permissions(directory_, fs::perms::owner_read | fs::perms::owner_exec);
+	}
+	~ReplacementBlock() { fs::permissions(directory_, fs::perms::owner_all); }
+
+	// Root ignores directory permissions.
+	static bool is_possible() { return geteuid() != 0; }
+#endif
+	ReplacementBlock(const ReplacementBlock &) = delete;
+	ReplacementBlock &operator=(const ReplacementBlock &) = delete;
+
+private:
+#if defined(_WIN32)
+	HANDLE handle_;
+#else
+	fs::path directory_;
+#endif
 };
 
 std::string read_file(const fs::path &path)
@@ -106,15 +154,17 @@ TEST_CASE(save_leaves_no_temporary_files_and_is_private_to_the_user)
 	REQUIRE(!repository.save(DestinationsConfig{}).has_value());
 
 	CHECK(names_in(directory.path()) == (std::vector<std::string>{"destinations.json"}));
+#if !defined(_WIN32)
 	struct stat info {};
 	REQUIRE(stat(path.c_str(), &info) == 0);
 	CHECK_EQ(static_cast<unsigned>(info.st_mode & 0777), 0600u);
+#endif
 }
 
 TEST_CASE(failed_save_keeps_the_previous_file_and_leaves_no_temporary_files)
 {
-	if (geteuid() == 0) {
-		return; // Root ignores directory permissions.
+	if (!ReplacementBlock::is_possible()) {
+		return;
 	}
 	TempDirectory directory;
 	const fs::path path = directory.path() / "destinations.json";
@@ -123,9 +173,10 @@ TEST_CASE(failed_save_keeps_the_previous_file_and_leaves_no_temporary_files)
 	REQUIRE(!repository.save(sample_config()).has_value());
 	const std::string before = read_file(path);
 
-	fs::permissions(directory.path(), fs::perms::owner_read | fs::perms::owner_exec);
-	CHECK(repository.save(DestinationsConfig{}).has_value());
-	fs::permissions(directory.path(), fs::perms::owner_all);
+	{
+		ReplacementBlock block(directory.path(), path);
+		CHECK(repository.save(DestinationsConfig{}).has_value());
+	}
 
 	CHECK_EQ(read_file(path), before);
 	CHECK(names_in(directory.path()) == (std::vector<std::string>{"destinations.json"}));
@@ -203,20 +254,21 @@ TEST_CASE(unreadable_config_blocks_saving_so_it_is_not_overwritten)
 
 TEST_CASE(corrupt_file_that_cannot_be_moved_blocks_saving)
 {
-	if (geteuid() == 0) {
-		return; // Root ignores directory permissions.
+	if (!ReplacementBlock::is_possible()) {
+		return;
 	}
 	TempDirectory directory;
 	const fs::path path = directory.path() / "destinations.json";
 	write_file(path, "{not json");
-	fs::permissions(directory.path(), fs::perms::owner_read | fs::perms::owner_exec);
 
-	FileConfigRepository repository(path);
-	const ConfigLoad load = repository.load();
-	CHECK(load.problem.has_value());
-	CHECK(repository.save(sample_config()).has_value());
+	{
+		ReplacementBlock block(directory.path(), path);
+		FileConfigRepository repository(path);
+		const ConfigLoad load = repository.load();
+		CHECK(load.problem.has_value());
+		CHECK(repository.save(sample_config()).has_value());
+	}
 
-	fs::permissions(directory.path(), fs::perms::owner_all);
 	CHECK_EQ(read_file(path), "{not json");
 }
 
