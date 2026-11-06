@@ -113,9 +113,12 @@ Written but not observed on the target stays unchecked until it is.
 
 - L1: "no te preocupes, dejalo asi, lo importante, saca la version de windows y linux"
 - L2: user decision — publish the release (chose "Publicar el GitHub Release"); release `v0.1.0`
-  published with both packages, assets attached and verified.
+  published with Windows and Linux packages.
+- L3: user asked to add the macOS package to the release; rebuilt macOS locally (27/27 tests),
+  packaged `obs-multi-stream-0.1.0-macos-arm64.zip` and attached it, release notes updated.
 
 ## Next step
 
-Release `v0.1.0` is published. T2 stays open only because the Linux preview has not been observed
-at runtime on a real OBS machine, which no such machine is available here to check.
+Release `v0.1.0` now has Windows, Linux and macOS packages. T2 stays open only because the Linux
+preview has not been observed at runtime on a real OBS machine, which no such machine is
+available here to check.
