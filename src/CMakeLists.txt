@@ -29,6 +29,7 @@ add_library(
   destinations/stream_stats.cpp
   destinations/validation.cpp
   destinations/vertical_settings.cpp
+  vertical_canvas/preview_geometry.cpp
 )
 target_include_directories(multistream_core PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 target_include_directories(multistream_core SYSTEM PRIVATE "${nlohmann_json_header_SOURCE_DIR}")

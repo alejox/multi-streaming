@@ -27,6 +27,9 @@ private:
 	void poll();
 	void run(const std::string &command, const std::string &argument);
 	void dump_vertical();
+	void dump_items();
+	void preview_mouse(const std::string &argument);
+	void preview_key(const std::string &argument);
 
 	std::string path_;
 	StreamingEngine &engine_;

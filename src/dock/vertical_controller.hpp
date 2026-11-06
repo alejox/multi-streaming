@@ -22,6 +22,8 @@ public:
 
 private:
 	void refresh();
+	void show_item_menu(std::int64_t id, const QPoint &global_position);
+	void remove_item(std::int64_t id);
 	void add_scene();
 	void rename_scene(const QString &name);
 	void remove_scene(const QString &name);

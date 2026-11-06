@@ -124,6 +124,11 @@ VerticalDock::VerticalDock(QWidget *parent)
 	connect(fit, &QPushButton::clicked, this, on_selected(&VerticalDock::fit_item_requested));
 	connect(fill, &QPushButton::clicked, this, on_selected(&VerticalDock::fill_item_requested));
 
+	connect(items_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item, QListWidgetItem *) {
+		if (!updating_) {
+			emit item_selected(item != nullptr ? item->data(kItemIdRole).toLongLong() : 0);
+		}
+	});
 	connect(items_, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
 		if (!updating_) {
 			emit item_visibility_requested(item->data(kItemIdRole).toLongLong(),
@@ -168,6 +173,19 @@ void VerticalDock::set_items(const std::vector<VerticalItemView> &items)
 		if (selected == view.id) {
 			item->setSelected(true);
 			items_->setCurrentItem(item);
+		}
+	}
+	updating_ = false;
+}
+
+void VerticalDock::select_item(std::optional<std::int64_t> id)
+{
+	updating_ = true;
+	items_->setCurrentItem(nullptr);
+	for (int row = 0; id && row < items_->count(); ++row) {
+		if (items_->item(row)->data(kItemIdRole).toLongLong() == *id) {
+			items_->setCurrentRow(row);
+			break;
 		}
 	}
 	updating_ = false;

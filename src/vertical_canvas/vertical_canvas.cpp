@@ -7,7 +7,11 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#include <graphics/matrix4.h>
+#include <graphics/vec4.h>
+
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace multistream {
@@ -39,6 +43,100 @@ OBSCanvas find_canvas()
 	}
 	obs_frontend_canvas_list_free(&list);
 	return found;
+}
+
+constexpr float kOutlineLogicalPixels = 2.0f;
+constexpr float kHandleLogicalPixels = 8.0f;
+
+void add_triangle_pair(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+{
+	for (const Vec2 &corner : {a, b, c, b, d, c}) {
+		gs_vertex2f(static_cast<float>(corner.x), static_cast<float>(corner.y));
+	}
+}
+
+void add_line(Vec2 from, Vec2 to, double thickness)
+{
+	const double length = std::hypot(to.x - from.x, to.y - from.y);
+	if (length <= 0.0) {
+		return;
+	}
+	const Vec2 side{-(to.y - from.y) / length * thickness / 2.0, (to.x - from.x) / length * thickness / 2.0};
+	add_triangle_pair({from.x + side.x, from.y + side.y}, {to.x + side.x, to.y + side.y},
+			  {from.x - side.x, from.y - side.y}, {to.x - side.x, to.y - side.y});
+}
+
+void add_square(Vec2 center, double side)
+{
+	const double half = side / 2.0;
+	add_triangle_pair({center.x - half, center.y - half}, {center.x + half, center.y - half},
+			  {center.x - half, center.y + half}, {center.x + half, center.y + half});
+}
+
+std::uint32_t top_left()
+{
+	return OBS_ALIGN_LEFT | OBS_ALIGN_TOP;
+}
+
+std::optional<Vec2> cropped_source_size(obs_sceneitem_t *item)
+{
+	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_sceneitem_crop crop = {};
+	obs_sceneitem_get_crop(item, &crop);
+	const double width = static_cast<double>(obs_source_get_width(source)) - crop.left - crop.right;
+	const double height = static_cast<double>(obs_source_get_height(source)) - crop.top - crop.bottom;
+	if (width <= 0.0 || height <= 0.0) {
+		return std::nullopt;
+	}
+	return Vec2{width, height};
+}
+
+// libobs recomputes the draw transform on the next video tick, so read the placement itself
+// when it says everything, which a plain item's does: a burst of nudges adds up correctly.
+std::optional<ItemBox> box_of(obs_sceneitem_t *item)
+{
+	const std::optional<Vec2> size = cropped_source_size(item);
+	if (!size) {
+		return std::nullopt;
+	}
+
+	const double rotation = obs_sceneitem_get_rot(item);
+	if (obs_sceneitem_get_bounds_type(item) == OBS_BOUNDS_NONE && obs_sceneitem_get_alignment(item) == top_left()) {
+		vec2 position;
+		vec2 scale;
+		obs_sceneitem_get_pos(item, &position);
+		obs_sceneitem_get_scale(item, &scale);
+		ItemBox box;
+		box.origin = {position.x, position.y};
+		box.width = scale.x * size->x;
+		box.height = scale.y * size->y;
+		box.rotation_degrees = rotation;
+		return box;
+	}
+
+	matrix4 transform;
+	obs_sceneitem_get_draw_transform(item, &transform);
+	return box_from_draw_transform({transform.t.x, transform.t.y}, {transform.x.x, transform.x.y},
+				       {transform.y.x, transform.y.y}, rotation, size->x, size->y);
+}
+
+bool has_video(obs_sceneitem_t *item)
+{
+	return (obs_source_get_output_flags(obs_sceneitem_get_source(item)) & OBS_SOURCE_VIDEO) != 0;
+}
+
+VerticalItem view_of(obs_sceneitem_t *item)
+{
+	obs_source_t *source = obs_sceneitem_get_source(item);
+	VerticalItem view;
+	view.id = obs_sceneitem_get_id(item);
+	view.name = obs_source_get_name(source);
+	const char *type = obs_source_get_unversioned_id(source);
+	view.type_id = type != nullptr ? type : "";
+	view.visible = obs_sceneitem_visible(item);
+	view.locked = obs_sceneitem_locked(item);
+	view.has_video = has_video(item);
+	return view;
 }
 
 } // namespace
@@ -75,7 +173,75 @@ void VerticalPreviewTarget::render(std::uint32_t window_width, std::uint32_t win
 	obs_canvas_render(canvas_);
 	gs_projection_pop();
 	gs_viewport_pop();
+
+	draw_overlay(window_width, window_height);
 	++rendered_frames_;
+}
+
+void VerticalPreviewTarget::set_overlay(const PreviewOverlay &overlay)
+{
+	const std::lock_guard<std::mutex> lock(mutex_);
+	overlay_ = overlay;
+}
+
+// In window pixels and over the whole window, so the marks stay the same size whatever the
+// preview's scale, and handles remain visible in the margins beside the canvas.
+void VerticalPreviewTarget::draw_overlay(std::uint32_t window_width, std::uint32_t window_height) const
+{
+	const bool has_guides = overlay_.guides.vertical_x || overlay_.guides.horizontal_y;
+	if (!overlay_.box && !has_guides) {
+		return;
+	}
+
+	const PreviewMapping mapping(width_, height_, static_cast<int>(window_width), static_cast<int>(window_height));
+	const double ratio = overlay_.pixel_ratio;
+	const double thickness = kOutlineLogicalPixels * ratio;
+
+	gs_viewport_push();
+	gs_projection_push();
+	gs_matrix_push();
+	gs_matrix_identity();
+	gs_set_viewport(0, 0, static_cast<int>(window_width), static_cast<int>(window_height));
+	gs_ortho(0.0f, static_cast<float>(window_width), 0.0f, static_cast<float>(window_height), -100.0f, 100.0f);
+
+	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_SOLID);
+	vec4 red;
+	vec4_set(&red, 1.0f, 0.0f, 0.0f, 1.0f);
+	gs_effect_set_vec4(gs_effect_get_param_by_name(effect, "color"), &red);
+	gs_technique_t *technique = gs_effect_get_technique(effect, "Solid");
+	gs_technique_begin(technique);
+	gs_technique_begin_pass(technique, 0);
+
+	gs_render_start(true);
+	if (overlay_.guides.vertical_x) {
+		add_line(mapping.to_window({*overlay_.guides.vertical_x, 0.0}),
+			 mapping.to_window({*overlay_.guides.vertical_x, static_cast<double>(height_)}), thickness / 2.0);
+	}
+	if (overlay_.guides.horizontal_y) {
+		add_line(mapping.to_window({0.0, *overlay_.guides.horizontal_y}),
+			 mapping.to_window({static_cast<double>(width_), *overlay_.guides.horizontal_y}), thickness / 2.0);
+	}
+	if (overlay_.box) {
+		const std::array<Vec2, 4> corners = box_corners(*overlay_.box);
+		for (std::size_t i = 0; i < corners.size(); ++i) {
+			add_line(mapping.to_window(corners[i]), mapping.to_window(corners[(i + 1) % corners.size()]),
+				 thickness);
+		}
+		if (overlay_.handles) {
+			for (const Handle handle : kAllHandles) {
+				add_square(mapping.to_window(handle_position(*overlay_.box, handle)),
+					   kHandleLogicalPixels * ratio);
+			}
+		}
+	}
+	gs_render_stop(GS_TRIS);
+
+	gs_technique_end_pass(technique);
+	gs_technique_end(technique);
+
+	gs_matrix_pop();
+	gs_projection_pop();
+	gs_viewport_pop();
 }
 
 VerticalCanvas::VerticalCanvas(std::filesystem::path settings_path)
@@ -325,11 +491,7 @@ std::vector<VerticalItem> VerticalCanvas::items() const
 	obs_scene_enum_items(
 		scene,
 		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
-			VerticalItem view;
-			view.id = obs_sceneitem_get_id(item);
-			view.name = obs_source_get_name(obs_sceneitem_get_source(item));
-			view.visible = obs_sceneitem_visible(item);
-			static_cast<std::vector<VerticalItem> *>(param)->push_back(std::move(view));
+			static_cast<std::vector<VerticalItem> *>(param)->push_back(view_of(item));
 			return true;
 		},
 		&result);
@@ -365,7 +527,28 @@ OBSSceneItem VerticalCanvas::find_item(std::int64_t id) const
 	}
 	OBSSourceAutoRelease channel = obs_canvas_get_channel(canvas_, 0);
 	obs_scene_t *scene = obs_scene_from_source(channel);
-	return scene != nullptr ? obs_scene_find_sceneitem_by_id(scene, id) : nullptr;
+	if (scene == nullptr) {
+		return nullptr;
+	}
+
+	// Enumeration holds each item while its callback runs, so the reference taken here
+	// cannot race a removal, as one taken after obs_scene_find_sceneitem_by_id could.
+	struct Search {
+		std::int64_t id;
+		OBSSceneItem found;
+	} search{id, nullptr};
+	obs_scene_enum_items(
+		scene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+			auto *current = static_cast<Search *>(param);
+			if (obs_sceneitem_get_id(item) != current->id) {
+				return true;
+			}
+			current->found = item;
+			return false;
+		},
+		&search);
+	return search.found;
 }
 
 bool VerticalCanvas::remove_item(std::int64_t id)
@@ -385,7 +568,20 @@ bool VerticalCanvas::move_item(std::int64_t id, Move move)
 	if (!item) {
 		return false;
 	}
-	obs_sceneitem_set_order(item, move == Move::Up ? OBS_ORDER_MOVE_UP : OBS_ORDER_MOVE_DOWN);
+	switch (move) {
+	case Move::Up:
+		obs_sceneitem_set_order(item, OBS_ORDER_MOVE_UP);
+		break;
+	case Move::Down:
+		obs_sceneitem_set_order(item, OBS_ORDER_MOVE_DOWN);
+		break;
+	case Move::Top:
+		obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
+		break;
+	case Move::Bottom:
+		obs_sceneitem_set_order(item, OBS_ORDER_MOVE_BOTTOM);
+		break;
+	}
 	notify();
 	return true;
 }
@@ -421,6 +617,136 @@ bool VerticalCanvas::fill_item(std::int64_t id)
 	place_item(item, OBS_BOUNDS_SCALE_OUTER);
 	notify();
 	return true;
+}
+
+bool VerticalCanvas::set_item_locked(std::int64_t id, bool locked)
+{
+	OBSSceneItem item = find_item(id);
+	if (!item) {
+		return false;
+	}
+	obs_sceneitem_set_locked(item, locked);
+	notify();
+	return true;
+}
+
+bool VerticalCanvas::center_item(std::int64_t id)
+{
+	OBSSceneItem item = find_item(id);
+	const std::optional<ItemBox> box = item ? box_of(item) : std::nullopt;
+	if (!box) {
+		return false;
+	}
+	return set_item_box(id, centered_box(*box, canvas_size())) == BoxResult::Applied;
+}
+
+bool VerticalCanvas::reset_item_transform(std::int64_t id)
+{
+	OBSSceneItem item = find_item(id);
+	if (!item) {
+		return false;
+	}
+	obs_transform_info info = {};
+	obs_sceneitem_get_info2(item, &info);
+	vec2_set(&info.pos, 0.0f, 0.0f);
+	vec2_set(&info.scale, 1.0f, 1.0f);
+	info.rot = 0.0f;
+	info.alignment = top_left();
+	info.bounds_type = OBS_BOUNDS_NONE;
+	const obs_sceneitem_crop no_crop = {};
+
+	obs_sceneitem_defer_update_begin(item);
+	obs_sceneitem_set_info2(item, &info);
+	obs_sceneitem_set_crop(item, &no_crop);
+	obs_sceneitem_defer_update_end(item);
+	return true;
+}
+
+void VerticalCanvas::save_collection() const
+{
+	obs_frontend_save();
+}
+
+CanvasSize VerticalCanvas::canvas_size() const
+{
+	return {static_cast<double>(settings_.width), static_cast<double>(settings_.height)};
+}
+
+std::vector<PreviewItem> VerticalCanvas::preview_items() const
+{
+	std::vector<PreviewItem> result;
+	if (!canvas_) {
+		return result;
+	}
+	OBSSourceAutoRelease channel = obs_canvas_get_channel(canvas_, 0);
+	obs_scene_t *scene = obs_scene_from_source(channel);
+	if (scene == nullptr) {
+		return result;
+	}
+	obs_scene_enum_items(
+		scene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+			if (!has_video(item)) {
+				return true;
+			}
+			const std::optional<ItemBox> box = box_of(item);
+			if (box) {
+				PreviewItem preview;
+				preview.id = obs_sceneitem_get_id(item);
+				preview.box = *box;
+				preview.visible = obs_sceneitem_visible(item);
+				preview.locked = obs_sceneitem_locked(item);
+				static_cast<std::vector<PreviewItem> *>(param)->push_back(preview);
+			}
+			return true;
+		},
+		&result);
+	std::reverse(result.begin(), result.end());
+	return result;
+}
+
+std::optional<PreviewItem> VerticalCanvas::preview_item(std::int64_t id) const
+{
+	OBSSceneItem item = find_item(id);
+	const std::optional<ItemBox> box = item ? box_of(item) : std::nullopt;
+	if (!box) {
+		return std::nullopt;
+	}
+	PreviewItem preview;
+	preview.id = id;
+	preview.box = *box;
+	preview.visible = obs_sceneitem_visible(item);
+	preview.locked = obs_sceneitem_locked(item);
+	return preview;
+}
+
+VerticalCanvas::BoxResult VerticalCanvas::set_item_box(std::int64_t id, const ItemBox &box)
+{
+	OBSSceneItem item = find_item(id);
+	if (!item) {
+		return BoxResult::Gone;
+	}
+	if (obs_sceneitem_locked(item)) {
+		return BoxResult::Skipped;
+	}
+
+	// The source's size is read now, not when the gesture began: it can change meanwhile.
+	const std::optional<Vec2> size = cropped_source_size(item);
+	const std::optional<ItemPlacement> placement =
+		size ? placement_for_box(box, size->x, size->y) : std::nullopt;
+	if (!placement) {
+		return BoxResult::Skipped;
+	}
+
+	const vec2 position = {static_cast<float>(placement->position.x), static_cast<float>(placement->position.y)};
+	const vec2 scale = {static_cast<float>(placement->scale.x), static_cast<float>(placement->scale.y)};
+	obs_sceneitem_defer_update_begin(item);
+	obs_sceneitem_set_bounds_type(item, OBS_BOUNDS_NONE);
+	obs_sceneitem_set_alignment(item, top_left());
+	obs_sceneitem_set_scale(item, &scale);
+	obs_sceneitem_set_pos(item, &position);
+	obs_sceneitem_defer_update_end(item);
+	return BoxResult::Applied;
 }
 
 bool VerticalCanvas::reset_video()

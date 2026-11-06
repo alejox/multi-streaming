@@ -12,6 +12,7 @@
 
 #include "destinations/vertical_settings.hpp"
 #include "streaming/video_sources.hpp"
+#include "vertical_canvas/preview_geometry.hpp"
 
 #include <obs.hpp>
 
@@ -27,12 +28,22 @@
 
 namespace multistream {
 
+// The editing marks over the canvas, as the UI thread last saw them. The graphics thread
+// only draws this copy: it never touches a scene item, which the UI thread can remove.
+struct PreviewOverlay {
+	std::optional<ItemBox> box;
+	bool handles = false;
+	SnapGuides guides;
+	double pixel_ratio = 1.0;
+};
+
 // What a preview draws. Its draw callback runs on the graphics thread and can outlast the
 // canvas, in which case it draws nothing.
 class VerticalPreviewTarget {
 public:
 	void set(obs_canvas_t *canvas, int width, int height);
 	void clear();
+	void set_overlay(const PreviewOverlay &overlay);
 
 	// Graphics thread, in a display's draw callback.
 	void render(std::uint32_t window_width, std::uint32_t window_height);
@@ -40,17 +51,24 @@ public:
 	std::uint64_t rendered_frames() const { return rendered_frames_; }
 
 private:
+	void draw_overlay(std::uint32_t window_width, std::uint32_t window_height) const;
+
 	std::mutex mutex_;
 	OBSCanvas canvas_;
 	int width_ = 0;
 	int height_ = 0;
+	PreviewOverlay overlay_;
 	std::atomic<std::uint64_t> rendered_frames_{0};
 };
 
 struct VerticalItem {
 	std::int64_t id = 0;
 	std::string name;
+	std::string type_id;
 	bool visible = true;
+	bool locked = false;
+	// Audio-only sources have no place in the picture.
+	bool has_video = true;
 };
 
 class VerticalCanvas final : public VideoSources {
@@ -94,11 +112,34 @@ public:
 	std::vector<VerticalItem> items() const;
 	bool add_source(const std::string &name);
 	bool remove_item(std::int64_t id);
-	enum class Move { Up, Down };
+	enum class Move { Up, Down, Top, Bottom };
 	bool move_item(std::int64_t id, Move move);
 	bool set_item_visible(std::int64_t id, bool visible);
 	bool fit_item(std::int64_t id);
 	bool fill_item(std::int64_t id);
+	bool set_item_locked(std::int64_t id, bool locked);
+	bool center_item(std::int64_t id);
+	bool reset_item_transform(std::int64_t id);
+
+	// Asks OBS to save the collection, which holds the scenes and their items.
+	void save_collection() const;
+
+	// For direct editing in the preview. The boxes show what is actually drawn: bounds and
+	// alignment are already resolved, so they are the same whatever set them.
+	CanvasSize canvas_size() const;
+	std::vector<PreviewItem> preview_items() const;
+	std::optional<PreviewItem> preview_item(std::int64_t id) const;
+	bool contains_item(std::int64_t id) const { return static_cast<bool>(find_item(id)); }
+
+	// Gives the item a plain top-left placement that shows the box, dropping any bounds:
+	// the picture stays where it is, and from then on it behaves like any plain item.
+	enum class BoxResult {
+		Applied,
+		// Nothing changed, for now: the item is locked or its source has no size yet.
+		Skipped,
+		Gone,
+	};
+	BoxResult set_item_box(std::int64_t id, const ItemBox &box);
 
 private:
 	bool reset_video();

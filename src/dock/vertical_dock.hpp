@@ -6,6 +6,7 @@
 #include <QWidget>
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 class QComboBox;
@@ -35,6 +36,7 @@ public:
 	void set_available(bool available);
 	void set_scenes(const std::vector<QString> &scenes, const QString &active);
 	void set_items(const std::vector<VerticalItemView> &items);
+	void select_item(std::optional<std::int64_t> id);
 	void set_main_sources(const std::vector<QString> &sources);
 	void set_resolution(int width, int height);
 	void show_message(const QString &message);
@@ -48,6 +50,7 @@ signals:
 	void remove_item_requested(std::int64_t id);
 	void move_item_up_requested(std::int64_t id);
 	void move_item_down_requested(std::int64_t id);
+	void item_selected(std::int64_t id);
 	void item_visibility_requested(std::int64_t id, bool visible);
 	void fit_item_requested(std::int64_t id);
 	void fill_item_requested(std::int64_t id);

@@ -2,12 +2,17 @@
 
 #include "destinations/vertical_settings.hpp"
 #include "dock/vertical_dock.hpp"
+#include "dock/vertical_preview.hpp"
 #include "streaming/streaming_engine.hpp"
 #include "vertical_canvas/vertical_canvas.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
+
+#include <QCoreApplication>
+#include <QKeyEvent>
+#include <QMouseEvent>
 
 #include <cstdio>
 #include <fstream>
@@ -110,9 +115,110 @@ void E2eCommands::run(const std::string &command, const std::string &argument)
 		if (QWidget *parent = dock_->parentWidget()) {
 			parent->show();
 		}
+	} else if (command == "preview_mouse") {
+		preview_mouse(argument);
+	} else if (command == "preview_key") {
+		preview_key(argument);
+	} else if (command == "dump_items") {
+		dump_items();
 	} else if (command == "preview_stats") {
 		obs_log(LOG_INFO, "e2e preview frames: %llu",
 			static_cast<unsigned long long>(canvas_.preview_target()->rendered_frames()));
+	}
+}
+
+// "press|move|release <canvas x> <canvas y> [shift] [nosnap]": real Qt events, delivered to
+// the widget the way a mouse would, at the spot that shows this canvas point.
+void E2eCommands::preview_mouse(const std::string &argument)
+{
+	VerticalPreview *preview = dock_->preview();
+	std::istringstream fields(argument);
+	std::string action;
+	double x = 0.0;
+	double y = 0.0;
+	fields >> action >> x >> y;
+
+	Qt::KeyboardModifiers modifiers;
+	std::string flag;
+	while (fields >> flag) {
+		if (flag == "shift") {
+			modifiers |= Qt::ShiftModifier;
+		} else if (flag == "nosnap") {
+			modifiers |= Qt::ControlModifier;
+		}
+	}
+
+	const double ratio = preview->devicePixelRatioF();
+	const CanvasSize size = canvas_.canvas_size();
+	const PreviewMapping mapping(static_cast<int>(size.width), static_cast<int>(size.height),
+				     static_cast<int>(preview->width() * ratio),
+				     static_cast<int>(preview->height() * ratio));
+	const Vec2 window = mapping.to_window({x, y});
+	const QPointF local(window.x / ratio, window.y / ratio);
+	const QPointF global = preview->mapToGlobal(local);
+
+	QEvent::Type type = QEvent::MouseMove;
+	Qt::MouseButton button = Qt::NoButton;
+	Qt::MouseButtons buttons = Qt::LeftButton;
+	if (action == "press") {
+		type = QEvent::MouseButtonPress;
+		button = Qt::LeftButton;
+	} else if (action == "release") {
+		type = QEvent::MouseButtonRelease;
+		button = Qt::LeftButton;
+		buttons = Qt::NoButton;
+	} else if (action == "hover") {
+		buttons = Qt::NoButton;
+	}
+	QMouseEvent event(type, local, global, button, buttons, modifiers);
+	QCoreApplication::sendEvent(preview, &event);
+	obs_log(LOG_INFO, "e2e preview_mouse %s: selected=%lld cursor=%d", action.c_str(),
+		static_cast<long long>(preview->selected_item().value_or(0)), static_cast<int>(preview->cursor().shape()));
+}
+
+// "<left|right|up|down|delete> [shift]". Sends the shortcut check first, as Qt does.
+void E2eCommands::preview_key(const std::string &argument)
+{
+	VerticalPreview *preview = dock_->preview();
+	std::istringstream fields(argument);
+	std::string name;
+	std::string flag;
+	fields >> name >> flag;
+
+	int key = Qt::Key_Left;
+	if (name == "right") {
+		key = Qt::Key_Right;
+	} else if (name == "up") {
+		key = Qt::Key_Up;
+	} else if (name == "down") {
+		key = Qt::Key_Down;
+	} else if (name == "delete") {
+		key = Qt::Key_Delete;
+	}
+	const Qt::KeyboardModifiers modifiers = flag == "shift" ? Qt::ShiftModifier : Qt::NoModifier;
+
+	QKeyEvent shortcut(QEvent::ShortcutOverride, key, modifiers);
+	shortcut.ignore();
+	QCoreApplication::sendEvent(preview, &shortcut);
+	QKeyEvent press(QEvent::KeyPress, key, modifiers);
+	QCoreApplication::sendEvent(preview, &press);
+	obs_log(LOG_INFO, "e2e preview_key %s: claimed shortcut=%d", name.c_str(), shortcut.isAccepted());
+}
+
+void E2eCommands::dump_items()
+{
+	for (const VerticalItem &view : canvas_.items()) {
+		const std::optional<PreviewItem> item = canvas_.preview_item(view.id);
+		if (!item) {
+			obs_log(LOG_INFO, "e2e item %lld %s type=%s video=%d: no box", static_cast<long long>(view.id),
+				view.name.c_str(), view.type_id.c_str(), view.has_video);
+			continue;
+		}
+		obs_log(LOG_INFO,
+			"e2e item %lld %s type=%s video=%d visible=%d locked=%d box origin=%.2f,%.2f size=%.2fx%.2f rot=%.1f",
+			static_cast<long long>(view.id), view.name.c_str(), view.type_id.c_str(), view.has_video,
+			item->visible, item->locked, item->box.origin.x, item->box.origin.y, item->box.width,
+			item->box.height, item->box.rotation_degrees);
 	}
 }
 
