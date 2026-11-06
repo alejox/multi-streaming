@@ -73,6 +73,28 @@ void add_square(Vec2 center, double side)
 			  {center.x - half, center.y + half}, {center.x + half, center.y + half});
 }
 
+// Fills the whole canvas area in solid black, in canvas coordinates. The display's own
+// background (the margins around the canvas) is a lighter gray, so this is what makes the
+// canvas rectangle visible, the same way the main OBS preview separates the two.
+void fill_canvas_backdrop(int width, int height)
+{
+	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_SOLID);
+	vec4 color;
+	vec4_set(&color, 0.0f, 0.0f, 0.0f, 1.0f);
+	gs_effect_set_vec4(gs_effect_get_param_by_name(effect, "color"), &color);
+	gs_technique_t *technique = gs_effect_get_technique(effect, "Solid");
+	gs_technique_begin(technique);
+	gs_technique_begin_pass(technique, 0);
+	gs_render_start(true);
+	gs_vertex2f(0.0f, 0.0f);
+	gs_vertex2f(static_cast<float>(width), 0.0f);
+	gs_vertex2f(0.0f, static_cast<float>(height));
+	gs_vertex2f(static_cast<float>(width), static_cast<float>(height));
+	gs_render_stop(GS_TRISTRIP);
+	gs_technique_end_pass(technique);
+	gs_technique_end(technique);
+}
+
 std::uint32_t top_left()
 {
 	return OBS_ALIGN_LEFT | OBS_ALIGN_TOP;
@@ -170,7 +192,10 @@ void VerticalPreviewTarget::render(std::uint32_t window_width, std::uint32_t win
 	gs_projection_push();
 	gs_ortho(0.0f, static_cast<float>(width_), 0.0f, static_cast<float>(height_), -100.0f, 100.0f);
 	gs_set_viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+
+	fill_canvas_backdrop(width_, height_);
 	obs_canvas_render(canvas_);
+
 	gs_projection_pop();
 	gs_viewport_pop();
 

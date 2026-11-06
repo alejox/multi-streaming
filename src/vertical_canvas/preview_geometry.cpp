@@ -86,29 +86,53 @@ struct Snap {
 	}
 };
 
-// Whichever of the box's sides and center lands closest to the canvas's sides and center.
-Snap snap_span(double low, double high, double canvas_side, double distance)
+// The canvas's sides and center, plus every other item's sides and center, as snap targets
+// for one axis.
+std::vector<double> snap_targets(const std::vector<ItemBox> &others, CanvasSize canvas, bool horizontal)
+{
+	const double side = horizontal ? canvas.width : canvas.height;
+	std::vector<double> targets{0.0, side, side / 2.0};
+	for (const ItemBox &other : others) {
+		const Bounds bounds = bounding_rectangle(other);
+		if (horizontal) {
+			targets.push_back(bounds.left);
+			targets.push_back(bounds.right);
+			targets.push_back((bounds.left + bounds.right) / 2.0);
+		} else {
+			targets.push_back(bounds.top);
+			targets.push_back(bounds.bottom);
+			targets.push_back((bounds.top + bounds.bottom) / 2.0);
+		}
+	}
+	return targets;
+}
+
+// Whichever of the box's sides and center lands closest to a target line.
+Snap snap_span(double low, double high, const std::vector<double> &targets, double distance)
 {
 	Snap snap;
 	if (distance <= 0.0) {
 		return snap;
 	}
-	snap.consider(low, 0.0, distance);
-	snap.consider(high, canvas_side, distance);
-	snap.consider((low + high) / 2.0, canvas_side / 2.0, distance);
+	const double center = (low + high) / 2.0;
+	for (const double target : targets) {
+		snap.consider(low, target, distance);
+		snap.consider(high, target, distance);
+		snap.consider(center, target, distance);
+	}
 	return snap;
 }
 
-// One moved edge, against the canvas's sides and center.
-Snap snap_edge(double position, double canvas_side, double distance)
+// One moved edge, against the same targets.
+Snap snap_edge(double position, const std::vector<double> &targets, double distance)
 {
 	Snap snap;
 	if (distance <= 0.0) {
 		return snap;
 	}
-	snap.consider(position, 0.0, distance);
-	snap.consider(position, canvas_side, distance);
-	snap.consider(position, canvas_side / 2.0, distance);
+	for (const double target : targets) {
+		snap.consider(position, target, distance);
+	}
 	return snap;
 }
 
@@ -269,15 +293,16 @@ std::optional<std::int64_t> pick_item(const std::vector<PreviewItem> &items, Vec
 	return std::nullopt;
 }
 
-BoxChange plan_move(const ItemBox &start, Vec2 delta, CanvasSize canvas, double snap_distance)
+BoxChange plan_move(const ItemBox &start, Vec2 delta, CanvasSize canvas, const std::vector<ItemBox> &others,
+		    double snap_distance)
 {
 	BoxChange change;
 	change.box = start;
 	change.box.origin = {std::round(start.origin.x + delta.x), std::round(start.origin.y + delta.y)};
 
 	const Bounds bounds = bounding_rectangle(change.box);
-	const Snap horizontal = snap_span(bounds.left, bounds.right, canvas.width, snap_distance);
-	const Snap vertical = snap_span(bounds.top, bounds.bottom, canvas.height, snap_distance);
+	const Snap horizontal = snap_span(bounds.left, bounds.right, snap_targets(others, canvas, true), snap_distance);
+	const Snap vertical = snap_span(bounds.top, bounds.bottom, snap_targets(others, canvas, false), snap_distance);
 	change.box.origin.x += horizontal.offset;
 	change.box.origin.y += vertical.offset;
 	change.guides.vertical_x = horizontal.line;
@@ -286,7 +311,7 @@ BoxChange plan_move(const ItemBox &start, Vec2 delta, CanvasSize canvas, double 
 }
 
 BoxChange plan_stretch(const ItemBox &start, Handle handle, Vec2 cursor, CanvasSize canvas,
-		       const StretchOptions &options)
+		       const std::vector<ItemBox> &others, const StretchOptions &options)
 {
 	const HandleSides sides = sides_of(handle);
 	const Vec2 local = to_local(start, cursor);
@@ -302,7 +327,8 @@ BoxChange plan_stretch(const ItemBox &start, Handle handle, Vec2 cursor, CanvasS
 		double &edge = sides.left ? left : right;
 		edge = local.x;
 		if (unrotated) {
-			const Snap snap = snap_edge(start.origin.x + edge, canvas.width, options.snap_distance);
+			const Snap snap = snap_edge(start.origin.x + edge, snap_targets(others, canvas, true),
+						   options.snap_distance);
 			edge += snap.offset;
 			change.guides.vertical_x = snap.line;
 		}
@@ -311,7 +337,8 @@ BoxChange plan_stretch(const ItemBox &start, Handle handle, Vec2 cursor, CanvasS
 		double &edge = sides.top ? top : bottom;
 		edge = local.y;
 		if (unrotated) {
-			const Snap snap = snap_edge(start.origin.y + edge, canvas.height, options.snap_distance);
+			const Snap snap = snap_edge(start.origin.y + edge, snap_targets(others, canvas, false),
+						   options.snap_distance);
 			edge += snap.offset;
 			change.guides.horizontal_y = snap.line;
 		}
@@ -449,7 +476,8 @@ bool PreviewInteraction::press(Vec2 point, const std::vector<PreviewItem> &items
 	return changed;
 }
 
-std::optional<BoxChange> PreviewInteraction::move(Vec2 point, CanvasSize canvas, const Modifiers &modifiers)
+std::optional<BoxChange> PreviewInteraction::move(Vec2 point, CanvasSize canvas, const std::vector<ItemBox> &others,
+						  const Modifiers &modifiers)
 {
 	if (mode_ == Mode::Idle) {
 		return std::nullopt;
@@ -463,13 +491,13 @@ std::optional<BoxChange> PreviewInteraction::move(Vec2 point, CanvasSize canvas,
 
 	const double snap_distance = modifiers.disable_snap ? 0.0 : tolerances_.snap_distance;
 	if (mode_ == Mode::Moving) {
-		return plan_move(start_box_, delta, canvas, snap_distance);
+		return plan_move(start_box_, delta, canvas, others, snap_distance);
 	}
 
 	StretchOptions options;
 	options.free_aspect = modifiers.shift;
 	options.snap_distance = snap_distance;
-	return plan_stretch(start_box_, handle_, point, canvas, options);
+	return plan_stretch(start_box_, handle_, point, canvas, others, options);
 }
 
 bool PreviewInteraction::release(Vec2 point, const std::vector<PreviewItem> &items)

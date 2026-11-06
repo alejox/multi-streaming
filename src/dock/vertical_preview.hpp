@@ -71,12 +71,17 @@ private:
 	PreviewMapping mapping() const;
 	Vec2 canvas_point(const QPointF &position) const;
 	PreviewInteraction::Tolerances tolerances() const;
+	// Boxes of the other visible, unlocked items, to snap against.
+	std::vector<ItemBox> other_boxes() const;
 	void refresh_overlay();
 	void lose_selection();
 	void show_cursor(PreviewCursor cursor);
 	void nudge(NudgeDirection direction, bool shift);
 
 	OBSDisplay display_;
+	// Disabled displays retired on undock/hide, destroyed only by the destructor after any
+	// queued OpenGL swapchain update has finished. One per undock; small and bounded in use.
+	std::vector<OBSDisplay> retired_displays_;
 	QWindow *watched_window_ = nullptr;
 	// Read on the graphics thread, so only changed while no draw callback is registered.
 	std::shared_ptr<VerticalPreviewTarget> target_;

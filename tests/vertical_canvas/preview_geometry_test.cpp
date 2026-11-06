@@ -145,7 +145,7 @@ TEST_CASE(cursors_follow_rotation_and_flip)
 
 TEST_CASE(a_move_far_from_edges_is_the_rounded_delta)
 {
-	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {50.4, 30.6}, kCanvas, 10.0);
+	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {50.4, 30.6}, kCanvas, {}, 10.0);
 	CHECK_POINT(change.box.origin, 150.0, 131.0);
 	CHECK(!change.guides.vertical_x);
 	CHECK(!change.guides.horizontal_y);
@@ -153,7 +153,7 @@ TEST_CASE(a_move_far_from_edges_is_the_rounded_delta)
 
 TEST_CASE(a_move_snaps_to_the_near_edges)
 {
-	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {-95.0, 1715.0}, kCanvas, 10.0);
+	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {-95.0, 1715.0}, kCanvas, {}, 10.0);
 	CHECK_POINT(change.box.origin, 0.0, 1820.0);
 	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 0.0, kTolerance);
 	CHECK_NEAR(change.guides.horizontal_y.value_or(-1.0), 1920.0, kTolerance);
@@ -161,7 +161,7 @@ TEST_CASE(a_move_snaps_to_the_near_edges)
 
 TEST_CASE(a_move_snaps_to_the_right_edge_and_center)
 {
-	const BoxChange change = plan_move(box_at(0.0, 0.0, 200.0, 100.0), {873.0, 906.0}, kCanvas, 10.0);
+	const BoxChange change = plan_move(box_at(0.0, 0.0, 200.0, 100.0), {873.0, 906.0}, kCanvas, {}, 10.0);
 	CHECK_POINT(change.box.origin, 880.0, 910.0);
 	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 1080.0, kTolerance);
 	CHECK_NEAR(change.guides.horizontal_y.value_or(-1.0), 960.0, kTolerance);
@@ -169,27 +169,57 @@ TEST_CASE(a_move_snaps_to_the_right_edge_and_center)
 
 TEST_CASE(a_snap_distance_of_zero_turns_snapping_off)
 {
-	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {-95.0, 0.0}, kCanvas, 0.0);
+	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {-95.0, 0.0}, kCanvas, {}, 0.0);
 	CHECK_POINT(change.box.origin, 5.0, 100.0);
 }
 
 TEST_CASE(a_rotated_move_snaps_its_bounding_rectangle)
 {
 	// Rotated 90 degrees, its bounding rectangle's left side is at origin.x - height.
-	const BoxChange change = plan_move(box_at(300.0, 100.0, 200.0, 100.0, 90.0), {-195.0, 0.0}, kCanvas, 10.0);
+	const BoxChange change = plan_move(box_at(300.0, 100.0, 200.0, 100.0, 90.0), {-195.0, 0.0}, kCanvas, {}, 10.0);
 	CHECK_NEAR(change.box.origin.x, 100.0, kTolerance);
 }
 
 TEST_CASE(a_full_canvas_box_stays_put_at_the_edges)
 {
-	const BoxChange change = plan_move(box_at(0.0, 0.0, 1080.0, 1920.0), {6.0, -7.0}, kCanvas, 10.0);
+	const BoxChange change = plan_move(box_at(0.0, 0.0, 1080.0, 1920.0), {6.0, -7.0}, kCanvas, {}, 10.0);
 	CHECK_POINT(change.box.origin, 0.0, 0.0);
+}
+
+TEST_CASE(a_move_snaps_to_another_items_edge)
+{
+	const std::vector<ItemBox> others = {box_at(400.0, 500.0, 200.0, 200.0)};
+	const BoxChange change = plan_move(box_at(100.0, 100.0, 200.0, 100.0), {95.0, 0.0}, kCanvas, others, 10.0);
+	CHECK_POINT(change.box.origin, 200.0, 100.0);
+	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 400.0, kTolerance);
+	CHECK(!change.guides.horizontal_y);
+}
+
+TEST_CASE(a_move_snaps_to_another_items_center)
+{
+	const std::vector<ItemBox> others = {box_at(700.0, 500.0, 200.0, 200.0)};
+	const BoxChange change = plan_move(box_at(100.0, 100.0, 100.0, 100.0), {645.0, 0.0}, kCanvas, others, 10.0);
+	CHECK_POINT(change.box.origin, 750.0, 100.0);
+	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 800.0, kTolerance);
+	CHECK(!change.guides.horizontal_y);
+}
+
+TEST_CASE(a_stretch_snaps_the_moved_edge_to_another_item)
+{
+	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
+	const std::vector<ItemBox> others = {box_at(400.0, 500.0, 200.0, 200.0)};
+	StretchOptions options;
+	options.free_aspect = true;
+	options.snap_distance = 10.0;
+	const BoxChange change = plan_stretch(start, Handle::Right, {395.0, 150.0}, kCanvas, others, options);
+	CHECK_NEAR(change.box.width, 300.0, kTolerance);
+	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 400.0, kTolerance);
 }
 
 TEST_CASE(a_locked_corner_stretch_keeps_aspect_and_the_opposite_corner)
 {
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
-	const BoxChange change = plan_stretch(start, Handle::BottomRight, {500.0, 200.0}, kCanvas, {});
+	const BoxChange change = plan_stretch(start, Handle::BottomRight, {500.0, 200.0}, kCanvas, {}, {});
 	CHECK_NEAR(change.box.width, 400.0, kTolerance);
 	CHECK_NEAR(change.box.height, 200.0, kTolerance);
 	CHECK_POINT(change.box.origin, 100.0, 100.0);
@@ -198,7 +228,7 @@ TEST_CASE(a_locked_corner_stretch_keeps_aspect_and_the_opposite_corner)
 TEST_CASE(a_locked_top_left_stretch_keeps_the_bottom_right_corner)
 {
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
-	const BoxChange change = plan_stretch(start, Handle::TopLeft, {200.0, 150.0}, kCanvas, {});
+	const BoxChange change = plan_stretch(start, Handle::TopLeft, {200.0, 150.0}, kCanvas, {}, {});
 	CHECK_NEAR(change.box.width, 100.0, kTolerance);
 	CHECK_NEAR(change.box.height, 50.0, kTolerance);
 	CHECK_POINT(box_point(change.box, 1.0, 1.0), 300.0, 200.0);
@@ -207,7 +237,7 @@ TEST_CASE(a_locked_top_left_stretch_keeps_the_bottom_right_corner)
 TEST_CASE(a_locked_edge_stretch_grows_the_other_side_around_its_center)
 {
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
-	const BoxChange change = plan_stretch(start, Handle::Bottom, {200.0, 300.0}, kCanvas, {});
+	const BoxChange change = plan_stretch(start, Handle::Bottom, {200.0, 300.0}, kCanvas, {}, {});
 	CHECK_NEAR(change.box.height, 200.0, kTolerance);
 	CHECK_NEAR(change.box.width, 400.0, kTolerance);
 	CHECK_POINT(change.box.origin, 0.0, 100.0);
@@ -218,10 +248,10 @@ TEST_CASE(a_free_stretch_moves_only_what_the_handle_moves)
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
 	StretchOptions options;
 	options.free_aspect = true;
-	const BoxChange corner = plan_stretch(start, Handle::BottomRight, {500.0, 150.0}, kCanvas, options);
+	const BoxChange corner = plan_stretch(start, Handle::BottomRight, {500.0, 150.0}, kCanvas, {}, options);
 	CHECK_NEAR(corner.box.width, 400.0, kTolerance);
 	CHECK_NEAR(corner.box.height, 50.0, kTolerance);
-	const BoxChange edge = plan_stretch(start, Handle::Right, {400.0, 999.0}, kCanvas, options);
+	const BoxChange edge = plan_stretch(start, Handle::Right, {400.0, 999.0}, kCanvas, {}, options);
 	CHECK_NEAR(edge.box.width, 300.0, kTolerance);
 	CHECK_NEAR(edge.box.height, 100.0, kTolerance);
 }
@@ -230,7 +260,7 @@ TEST_CASE(a_stretch_at_the_start_point_does_not_jump)
 {
 	// A 9:16 fill box whose aspect differs from a 16:9 source must stay as it is.
 	const ItemBox start = box_at(0.0, 0.0, 1080.0, 1920.0);
-	const BoxChange change = plan_stretch(start, Handle::BottomRight, {1080.0, 1920.0}, kCanvas, {});
+	const BoxChange change = plan_stretch(start, Handle::BottomRight, {1080.0, 1920.0}, kCanvas, {}, {});
 	CHECK_NEAR(change.box.width, 1080.0, kTolerance);
 	CHECK_NEAR(change.box.height, 1920.0, kTolerance);
 	CHECK_POINT(change.box.origin, 0.0, 0.0);
@@ -242,7 +272,7 @@ TEST_CASE(a_stretch_snaps_the_moved_edge)
 	StretchOptions options;
 	options.free_aspect = true;
 	options.snap_distance = 10.0;
-	const BoxChange change = plan_stretch(start, Handle::Right, {1074.0, 150.0}, kCanvas, options);
+	const BoxChange change = plan_stretch(start, Handle::Right, {1074.0, 150.0}, kCanvas, {}, options);
 	CHECK_NEAR(change.box.width, 980.0, kTolerance);
 	CHECK_NEAR(change.guides.vertical_x.value_or(-1.0), 1080.0, kTolerance);
 }
@@ -254,7 +284,7 @@ TEST_CASE(a_stretch_leaves_the_unmoved_edge_out_of_snapping)
 	StretchOptions options;
 	options.free_aspect = true;
 	options.snap_distance = 10.0;
-	const BoxChange change = plan_stretch(start, Handle::Right, {400.0, 150.0}, kCanvas, options);
+	const BoxChange change = plan_stretch(start, Handle::Right, {400.0, 150.0}, kCanvas, {}, options);
 	CHECK_NEAR(change.box.width, 397.0, kTolerance);
 	CHECK_NEAR(change.box.origin.x, 3.0, kTolerance);
 	CHECK(!change.guides.vertical_x);
@@ -265,7 +295,7 @@ TEST_CASE(a_stretch_past_the_opposite_side_flips)
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
 	StretchOptions options;
 	options.free_aspect = true;
-	const BoxChange change = plan_stretch(start, Handle::Right, {50.0, 150.0}, kCanvas, options);
+	const BoxChange change = plan_stretch(start, Handle::Right, {50.0, 150.0}, kCanvas, {}, options);
 	CHECK_NEAR(change.box.width, -50.0, kTolerance);
 	CHECK_POINT(change.box.origin, 100.0, 100.0);
 }
@@ -275,7 +305,7 @@ TEST_CASE(a_stretch_keeps_at_least_one_pixel)
 	const ItemBox start = box_at(100.0, 100.0, 200.0, 100.0);
 	StretchOptions options;
 	options.free_aspect = true;
-	const BoxChange change = plan_stretch(start, Handle::Right, {100.0, 150.0}, kCanvas, options);
+	const BoxChange change = plan_stretch(start, Handle::Right, {100.0, 150.0}, kCanvas, {}, options);
 	CHECK_NEAR(change.box.width, 1.0, kTolerance);
 }
 
@@ -286,7 +316,7 @@ TEST_CASE(a_rotated_stretch_keeps_the_opposite_corner_on_screen)
 	StretchOptions options;
 	options.free_aspect = true;
 	const Vec2 cursor = box_point(start, 2.0, 2.0);
-	const BoxChange change = plan_stretch(start, Handle::BottomRight, cursor, kCanvas, options);
+	const BoxChange change = plan_stretch(start, Handle::BottomRight, cursor, kCanvas, {}, options);
 	CHECK_NEAR(change.box.width, 400.0, kTolerance);
 	CHECK_NEAR(change.box.height, 200.0, kTolerance);
 	CHECK_POINT(box_point(change.box, 0.0, 0.0), opposite.x, opposite.y);
@@ -362,13 +392,13 @@ TEST_CASE(a_drag_moves_the_selected_item_after_the_threshold)
 	const std::vector<PreviewItem> items = {item(1, box_at(100, 100, 200, 100))};
 	PreviewInteraction interaction;
 	interaction.press({150.0, 150.0}, items, tolerances());
-	CHECK(!interaction.move({152.0, 150.0}, kCanvas, {}));
-	const auto change = interaction.move({250.0, 170.0}, kCanvas, {});
+	CHECK(!interaction.move({152.0, 150.0}, kCanvas, {}, {}));
+	const auto change = interaction.move({250.0, 170.0}, kCanvas, {}, {});
 	REQUIRE(change.has_value());
 	CHECK_POINT(change->box.origin, 200.0, 120.0);
 	CHECK(interaction.dragging());
 	// Below the threshold again, the drag goes on.
-	const auto back = interaction.move({151.0, 150.0}, kCanvas, {});
+	const auto back = interaction.move({151.0, 150.0}, kCanvas, {}, {});
 	REQUIRE(back.has_value());
 	CHECK_POINT(back->box.origin, 101.0, 100.0);
 }
@@ -379,11 +409,11 @@ TEST_CASE(a_modifier_disables_snapping_during_a_drag)
 	PreviewInteraction interaction;
 	interaction.press({150.0, 150.0}, items, tolerances());
 	PreviewInteraction::Modifiers modifiers;
-	const auto snapped = interaction.move({55.0, 150.0}, kCanvas, modifiers);
+	const auto snapped = interaction.move({55.0, 150.0}, kCanvas, {}, modifiers);
 	REQUIRE(snapped.has_value());
 	CHECK_NEAR(snapped->box.origin.x, 0.0, kTolerance);
 	modifiers.disable_snap = true;
-	const auto free = interaction.move({55.0, 150.0}, kCanvas, modifiers);
+	const auto free = interaction.move({55.0, 150.0}, kCanvas, {}, modifiers);
 	REQUIRE(free.has_value());
 	CHECK_NEAR(free->box.origin.x, 5.0, kTolerance);
 }
@@ -394,7 +424,7 @@ TEST_CASE(a_handle_of_the_selected_item_starts_a_stretch)
 	PreviewInteraction interaction;
 	interaction.select(1);
 	CHECK(!interaction.press({300.0, 200.0}, items, tolerances()));
-	const auto change = interaction.move({500.0, 300.0}, kCanvas, {});
+	const auto change = interaction.move({500.0, 300.0}, kCanvas, {}, {});
 	REQUIRE(change.has_value());
 	CHECK_NEAR(change->box.width, 400.0, kTolerance);
 	CHECK_NEAR(change->box.height, 200.0, kTolerance);
@@ -408,7 +438,7 @@ TEST_CASE(shift_frees_the_aspect)
 	interaction.press({300.0, 200.0}, items, tolerances());
 	PreviewInteraction::Modifiers modifiers;
 	modifiers.shift = true;
-	const auto change = interaction.move({500.0, 250.0}, kCanvas, modifiers);
+	const auto change = interaction.move({500.0, 250.0}, kCanvas, {}, modifiers);
 	REQUIRE(change.has_value());
 	CHECK_NEAR(change->box.width, 400.0, kTolerance);
 	CHECK_NEAR(change->box.height, 150.0, kTolerance);
@@ -419,7 +449,7 @@ TEST_CASE(handles_of_an_unselected_item_do_nothing)
 	const std::vector<PreviewItem> items = {item(1, box_at(100, 100, 200, 100))};
 	PreviewInteraction interaction;
 	CHECK(interaction.press({299.0, 199.0}, items, tolerances()));
-	const auto change = interaction.move({350.0, 250.0}, kCanvas, {});
+	const auto change = interaction.move({350.0, 250.0}, kCanvas, {}, {});
 	REQUIRE(change.has_value());
 	CHECK_NEAR(change->box.width, 200.0, kTolerance);
 }
@@ -430,7 +460,7 @@ TEST_CASE(a_locked_selected_item_cannot_move_or_stretch)
 	PreviewInteraction interaction;
 	interaction.select(1);
 	interaction.press({300.0, 200.0}, items, tolerances());
-	CHECK(!interaction.move({500.0, 300.0}, kCanvas, {}));
+	CHECK(!interaction.move({500.0, 300.0}, kCanvas, {}, {}));
 	CHECK(handle_at(items[0].box, {300.0, 200.0}, 10.0) == Handle::BottomRight);
 }
 
@@ -441,7 +471,7 @@ TEST_CASE(a_hidden_selected_item_loses_its_handles)
 	interaction.select(1);
 	interaction.press({300.0, 200.0}, items, tolerances());
 	CHECK(!interaction.selection());
-	CHECK(!interaction.move({500.0, 300.0}, kCanvas, {}));
+	CHECK(!interaction.move({500.0, 300.0}, kCanvas, {}, {}));
 }
 
 TEST_CASE(a_click_without_drag_on_a_selected_item_below_selects_the_topmost)
@@ -461,7 +491,7 @@ TEST_CASE(a_drag_of_a_selected_item_below_keeps_it_selected)
 	PreviewInteraction interaction;
 	interaction.select(1);
 	interaction.press({50.0, 50.0}, items, tolerances());
-	CHECK(interaction.move({90.0, 90.0}, kCanvas, {}).has_value());
+	CHECK(interaction.move({90.0, 90.0}, kCanvas, {}, {}).has_value());
 	CHECK(!interaction.release({90.0, 90.0}, items));
 	CHECK_EQ(interaction.selection().value_or(0), 1);
 }
@@ -473,7 +503,7 @@ TEST_CASE(a_cancelled_gesture_stops_changing_the_box)
 	interaction.press({150.0, 150.0}, items, tolerances());
 	interaction.cancel();
 	CHECK(!interaction.gesture_active());
-	CHECK(!interaction.move({300.0, 300.0}, kCanvas, {}));
+	CHECK(!interaction.move({300.0, 300.0}, kCanvas, {}, {}));
 }
 
 TEST_CASE(a_selection_change_ends_the_gesture)
@@ -482,7 +512,7 @@ TEST_CASE(a_selection_change_ends_the_gesture)
 	PreviewInteraction interaction;
 	interaction.press({150.0, 150.0}, items, tolerances());
 	interaction.select(std::nullopt);
-	CHECK(!interaction.move({300.0, 300.0}, kCanvas, {}));
+	CHECK(!interaction.move({300.0, 300.0}, kCanvas, {}, {}));
 }
 
 TEST_CASE(the_cursor_follows_what_is_under_it)

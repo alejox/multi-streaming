@@ -108,10 +108,18 @@ void VerticalPreview::set_selected_item(std::optional<std::int64_t> id)
 
 void VerticalPreview::release()
 {
-	if (display_) {
-		obs_display_remove_draw_callback(display_, draw, this);
-		display_ = nullptr;
+	if (!display_) {
+		return;
 	}
+
+	// Never destroy a display while the graphics thread can still resize it: the OpenGL
+	// renderer queues a swapchain update on the main queue from a resize, and destroying
+	// the swapchain first crashes that block (__gl_update_block_invoke). Disable it so the
+	// graphics thread skips it, then retire it for the destructor, which runs after any
+	// queued update has long finished.
+	obs_display_set_enabled(display_, false);
+	obs_display_remove_draw_callback(display_, draw, this);
+	retired_displays_.push_back(std::move(display_));
 }
 
 void VerticalPreview::draw(void *data, uint32_t width, uint32_t height)
@@ -168,12 +176,16 @@ void VerticalPreview::create_display()
 	init.zsformat = GS_ZS_NONE;
 #if defined(__APPLE__)
 	init.window.view = reinterpret_cast<id>(native);
+#elif defined(_WIN32)
+	init.window.hwnd = reinterpret_cast<void *>(native);
 #else
 	static_cast<void>(native);
 	return;
 #endif
 
-	display_ = obs_display_create(&init, 0xFF000000);
+	// Gray background (0xAABBGGRR) so the margins stand apart from the black canvas
+	// rectangle, the same way the main OBS preview shows where the canvas ends.
+	display_ = obs_display_create(&init, 0xFF4A4A4A);
 	if (!display_) {
 		return;
 	}
@@ -271,6 +283,18 @@ PreviewInteraction::Tolerances VerticalPreview::tolerances() const
 	return result;
 }
 
+std::vector<ItemBox> VerticalPreview::other_boxes() const
+{
+	std::vector<ItemBox> others;
+	const auto selected = interaction_.selection();
+	for (const PreviewItem &item : canvas_->preview_items()) {
+		if (item.id != selected && item.visible && !item.locked) {
+			others.push_back(item.box);
+		}
+	}
+	return others;
+}
+
 void VerticalPreview::refresh_overlay()
 {
 	if (!target_) {
@@ -361,7 +385,8 @@ void VerticalPreview::mouseMoveEvent(QMouseEvent *event)
 		return;
 	}
 
-	const std::optional<BoxChange> change = interaction_.move(point, canvas_->canvas_size(), modifiers_of(event));
+	const std::optional<BoxChange> change =
+		interaction_.move(point, canvas_->canvas_size(), other_boxes(), modifiers_of(event));
 	const auto id = interaction_.selection();
 	if (!change || !id) {
 		return;

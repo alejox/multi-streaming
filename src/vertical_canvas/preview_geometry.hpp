@@ -102,9 +102,10 @@ struct BoxChange {
 	SnapGuides guides;
 };
 
-// Moves the box by the delta and pulls it onto a canvas edge or center within the distance.
-// A distance of 0 turns snapping off.
-BoxChange plan_move(const ItemBox &start, Vec2 delta, CanvasSize canvas, double snap_distance);
+// Moves the box by the delta and pulls it onto a canvas edge or center, or another item's
+// edge or center, within the distance. A distance of 0 turns snapping off.
+BoxChange plan_move(const ItemBox &start, Vec2 delta, CanvasSize canvas, const std::vector<ItemBox> &others,
+		    double snap_distance);
 
 struct StretchOptions {
 	bool free_aspect = false;
@@ -115,7 +116,7 @@ struct StretchOptions {
 // aspect holds unless it is freed, so a resize never jumps to another shape. Crossing the
 // opposite side flips the item. Snapping applies only to moved edges of an unrotated item.
 BoxChange plan_stretch(const ItemBox &start, Handle handle, Vec2 cursor, CanvasSize canvas,
-		       const StretchOptions &options);
+		       const std::vector<ItemBox> &others, const StretchOptions &options);
 
 // The same size and rotation, with its bounding rectangle centered.
 ItemBox centered_box(const ItemBox &box, CanvasSize canvas);
@@ -149,8 +150,10 @@ public:
 	// then the selected item itself, then the topmost item.
 	bool press(Vec2 point, const std::vector<PreviewItem> &items, const Tolerances &tolerances);
 
-	// The change to apply, if the gesture has passed the drag threshold.
-	std::optional<BoxChange> move(Vec2 point, CanvasSize canvas, const Modifiers &modifiers);
+	// The change to apply, if the gesture has passed the drag threshold. `others` are the
+	// other items' boxes to snap against.
+	std::optional<BoxChange> move(Vec2 point, CanvasSize canvas, const std::vector<ItemBox> &others,
+				      const Modifiers &modifiers);
 
 	// Returns whether the selection changed: a click without a drag on an already selected
 	// item selects the topmost item there.
