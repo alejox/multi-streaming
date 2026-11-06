@@ -54,12 +54,13 @@ Written but not observed on the target stays unchecked until it is.
 - [x] T3 Linux build: `cmake/linux/`, preset, dependency handling. Route: delegated. Commit
       `71e90ad`. CI run 42256716693 built against OBS 32.2.0 and packaged `bin/64bit/obs-multi-stream.so`,
       `data/` and `INSTALL.txt` (46 tar entries, inspected by the parent).
-- [ ] T4 GitHub Actions workflow for Windows and Linux with zip/tar artifacts. Route:
-      delegated. Commit `3ce0002`. The Linux job passed; the Windows job failed at Configure in
-      run 42256716693 and its fixes have not been through CI.
-- [ ] T5 Run CI, fix compile or test failures, download both packages. Route: parent operates
-      CI; fixes delegated. Windows fixes: commits `6b84999`, `973ddb0`, `1631940`, none of them
-      compiled on Windows yet. The Linux package is downloaded and inspected.
+- [x] T4 GitHub Actions workflow for Windows and Linux with zip/tar artifacts. Route:
+      delegated. Commit `3ce0002`. Windows and Linux both build, test and package; the Windows
+      job reached full green in run 42260565229.
+- [x] T5 Run CI, fix compile or test failures, download both packages. Route: parent operates
+      CI; fixes delegated. Run 42260565229 is fully green: both jobs build, test and package.
+      Both artifacts downloaded and inspected (Windows DLL PE32+ x86-64, Linux .so ELF x86-64;
+      neither contains the e2e marker).
 
 ## Verification evidence
 
@@ -69,6 +70,12 @@ Written but not observed on the target stays unchecked until it is.
 - Both Windows dependency zips were downloaded: their SHA-256 values equal `buildspec.json`,
   `file(ARCHIVE_EXTRACT)` handles them, and they extract with `share/obs-deps/VERSION` and
   `lib/cmake/Qt6/Qt6Config.cmake` at the root that the dependency check expects.
+- Windows zip `obs-multi-stream-0.1.0-windows-x64.zip` (run 42260565229) inspected: PE32+ x86-64
+  `obs-multi-stream.dll` (~1.0 MB), `data/` icons + `en-US.ini`, and `INSTALL.txt`; the
+  `MULTI_STREAM_E2E_SECRETS_ACTIVE` marker is absent.
+- Linux tar `obs-multi-stream-0.1.0-linux-x86_64.tar.gz` (run 42260565229) inspected: ELF x86-64
+  `bin/64bit/obs-multi-stream.so` (~17.7 MB, with debug info), `data/`, and `INSTALL.txt`
+  recording OBS 32.2.0-0obsproject1~noble; the e2e marker is absent.
 
 ## Findings
 
@@ -89,6 +96,12 @@ Written but not observed on the target stays unchecked until it is.
   its Win32 sub-configure, so CI time and network use are higher than the outer build suggests.
 - MSVC warning level stays at its default, with warnings as errors from `compiler_common.cmake`.
   A compile failure from a warning is a T5 fix, not a reason to lower the bar blindly.
+- pwsh cuts a native-command argument that starts with `-` when it is not quoted: the Windows
+  `check_no_e2e_marker` step received `.../obs-multi-stream` with the `.dll` stripped. Quoting
+  the `-DBINARY=...` argument fixes it (commit `5f2fdcb`).
+- The Linux job once hit its 45-minute timeout during `apt-get install` while the Ubuntu mirror
+  served packages far slower than usual; the step was progressing, just slowly. Re-running the
+  job is the fix, not a workflow change.
 
 ## Acceptance criteria
 
@@ -102,4 +115,6 @@ Written but not observed on the target stays unchecked until it is.
 
 ## Next step
 
-Push and run CI, then fix what the first Windows compile reveals (T5).
+Delivery is a human decision: publishing a GitHub Release stays out of scope. T2 stays open only
+because the Linux preview has not been observed at runtime on a real OBS machine, which no such
+machine is available here to check.
