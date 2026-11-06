@@ -10,7 +10,12 @@ project(obs-multi-stream-tests LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS FALSE)
-add_compile_options(-Wall -Wextra)
+if(MSVC)
+  add_compile_options(/W3 /utf-8)
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+else()
+  add_compile_options(-Wall -Wextra)
+endif()
 
 add_subdirectory(../src src)
 
@@ -58,4 +63,15 @@ if(APPLE)
   # Exit code 77 means the Keychain cannot be used from this session.
   add_core_test(keychain_secret_store_test secrets/keychain_secret_store_test.cpp)
   set_tests_properties(keychain_secret_store_test PROPERTIES SKIP_RETURN_CODE 77)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Exit code 77 means no Secret Service is reachable from this session.
+  add_core_test(linux_secret_store_test secrets/linux_secret_store_test.cpp)
+  set_tests_properties(linux_secret_store_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # A bus address that nothing listens on, so the store must report that it cannot work.
+  add_core_test(linux_secret_store_unavailable_test secrets/linux_secret_store_unavailable_test.cpp)
+  set_tests_properties(
+    linux_secret_store_unavailable_test
+    PROPERTIES ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/obs-multi-stream-test-bus"
+  )
 endif()

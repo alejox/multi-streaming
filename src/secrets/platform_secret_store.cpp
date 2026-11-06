@@ -4,6 +4,8 @@
 #include "secrets/keychain_secret_store.hpp"
 #elif defined(_WIN32)
 #include "secrets/windows_credential_store.hpp"
+#elif defined(__linux__)
+#include "secrets/linux_secret_store.hpp"
 #else
 #include "secrets/unavailable_secret_store.hpp"
 #endif
@@ -16,6 +18,8 @@ std::unique_ptr<SecretStore> make_platform_secret_store()
 	return std::make_unique<KeychainSecretStore>();
 #elif defined(_WIN32)
 	return std::make_unique<WindowsCredentialStore>();
+#elif defined(__linux__)
+	return std::make_unique<LinuxSecretStore>();
 #else
 	return std::make_unique<UnavailableSecretStore>("No secure secret store is implemented for this platform.");
 #endif
