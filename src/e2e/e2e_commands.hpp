@@ -7,21 +7,26 @@
 #endif
 
 #include <QObject>
+#include <QPointer>
 #include <QTimer>
 
+#include <memory>
 #include <string>
 
 namespace multistream {
 
 class StreamingEngine;
 class VerticalCanvas;
+class VerticalController;
 class VerticalDock;
+class DestinationsDock;
 
 class E2eCommands final : public QObject {
 	Q_OBJECT
 
 public:
-	E2eCommands(std::string path, StreamingEngine &engine, VerticalCanvas &canvas, VerticalDock *dock);
+	E2eCommands(std::string path, StreamingEngine &engine, VerticalCanvas &canvas, VerticalDock *dock,
+		    DestinationsDock *destinations_dock, const std::unique_ptr<VerticalController> &controller);
 
 private:
 	void poll();
@@ -30,12 +35,19 @@ private:
 	void dump_items();
 	void preview_mouse(const std::string &argument);
 	void preview_key(const std::string &argument);
+	void grab(const std::string &argument);
+	void answer_dialogs();
+	void log_dock_widgets();
 
 	std::string path_;
 	StreamingEngine &engine_;
 	VerticalCanvas &canvas_;
 	VerticalDock *dock_;
+	QPointer<DestinationsDock> destinations_dock_;
+	const std::unique_ptr<VerticalController> &controller_;
 	QTimer timer_;
+	QTimer answer_timer_;
+	bool auto_answer_ = false;
 };
 
 } // namespace multistream

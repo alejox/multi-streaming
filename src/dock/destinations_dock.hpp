@@ -6,17 +6,27 @@
 #include <QWidget>
 
 #include <map>
+#include <string>
 #include <vector>
 
+class QAction;
 class QLabel;
 class QPushButton;
+class QToolButton;
 class QVBoxLayout;
 
 namespace multistream {
 
+enum class RowTone { Idle, Busy, Live, Warning, Failed };
+
 struct DestinationRowStatus {
 	QString state;
+	RowTone tone = RowTone::Idle;
+	// Why it failed. Empty hides it.
 	QString detail;
+	// A warning that does not stop anything. Empty hides it.
+	QString warning;
+	// Only while active. Empty hides it.
 	QString stats;
 	bool can_start = false;
 	bool can_stop = false;
@@ -27,6 +37,8 @@ struct DestinationRowView {
 	QString id;
 	QString name;
 	QString source;
+	// Relative to the plugin's data directory.
+	std::string icon_file;
 	DestinationRowStatus status;
 };
 
@@ -49,19 +61,29 @@ signals:
 	void edit_requested(const QString &id);
 	void delete_requested(const QString &id);
 
+protected:
+	void changeEvent(QEvent *event) override;
+
 private:
 	struct RowWidgets {
+		QLabel *icon = nullptr;
+		QLabel *dot = nullptr;
 		QLabel *state = nullptr;
 		QLabel *detail = nullptr;
+		QLabel *warning = nullptr;
 		QLabel *stats = nullptr;
-		QPushButton *start = nullptr;
-		QPushButton *stop = nullptr;
-		QPushButton *edit = nullptr;
-		QPushButton *remove = nullptr;
+		QToolButton *toggle = nullptr;
+		QToolButton *more = nullptr;
+		QAction *edit = nullptr;
+		QAction *remove = nullptr;
+		std::string icon_file;
+		bool stops = false;
+		RowTone tone = RowTone::Idle;
 	};
 
 	QWidget *create_row(const DestinationRowView &view);
-	static void apply_status(const RowWidgets &widgets, const DestinationRowStatus &status);
+	void apply_status(RowWidgets &widgets, const DestinationRowStatus &status);
+	void apply_row_icons(RowWidgets &widgets);
 
 	QLabel *problem_ = nullptr;
 	QPushButton *dismiss_problem_ = nullptr;

@@ -76,6 +76,8 @@ VerticalDock::VerticalDock(QWidget *parent)
 	audio_note_->setTextFormat(Qt::RichText);
 	audio_note_->hide();
 
+	scenes_->setObjectName("vertical-scenes");
+	items_->setObjectName("vertical-sources");
 	scenes_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 	items_->setEditTriggers(QAbstractItemView::NoEditTriggers);
 

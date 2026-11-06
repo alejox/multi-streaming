@@ -1,16 +1,70 @@
 #include "dock/destinations_dock.hpp"
 
+#include "dock/icons.hpp"
+
 #include <obs-module.h>
 
+#include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLayoutItem>
+#include <QMenu>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace multistream {
+namespace {
+
+constexpr int kPlatformIconSize = 20;
+constexpr int kDotSize = 10;
+constexpr int kButtonIconSize = 16;
+
+QColor tone_color(RowTone tone, const QPalette &palette)
+{
+	switch (tone) {
+	case RowTone::Idle:
+		return palette.color(QPalette::Disabled, QPalette::WindowText);
+	case RowTone::Busy:
+		return QColor(0xE0, 0xB0, 0x20);
+	case RowTone::Live:
+		return QColor(0x30, 0xB0, 0x50);
+	case RowTone::Warning:
+		return QColor(0xE8, 0x80, 0x20);
+	case RowTone::Failed:
+		return QColor(0xE0, 0x40, 0x40);
+	}
+	return palette.color(QPalette::WindowText);
+}
+
+QPixmap status_dot(RowTone tone, const QPalette &palette, qreal ratio)
+{
+	const int pixels = qRound(kDotSize * ratio);
+	QPixmap pixmap(pixels, pixels);
+	pixmap.fill(Qt::transparent);
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing);
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(tone_color(tone, palette));
+	painter.drawEllipse(pixmap.rect());
+	painter.end();
+	pixmap.setDevicePixelRatio(ratio);
+	return pixmap;
+}
+
+QLabel *wrapping_label(QWidget *parent)
+{
+	auto *label = new QLabel(parent);
+	label->setTextFormat(Qt::PlainText);
+	label->setWordWrap(true);
+	label->hide();
+	return label;
+}
+
+} // namespace
 
 DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 {
@@ -98,64 +152,131 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	auto *row = new QFrame();
 	row->setFrameShape(QFrame::StyledPanel);
 
+	RowWidgets widgets;
+	widgets.icon_file = view.icon_file;
+	widgets.icon = new QLabel(row);
+
 	auto *name = new QLabel(view.name, row);
 	name->setTextFormat(Qt::PlainText);
-	auto *source = new QLabel(view.source, row);
+	name->setToolTip(view.name);
+	name->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
-	RowWidgets widgets;
+	auto *source = new QLabel(view.source, row);
+	source->setStyleSheet("border: 1px solid palette(text); border-radius: 3px; padding: 0 4px;");
+
+	widgets.dot = new QLabel(row);
 	widgets.state = new QLabel(row);
-	widgets.detail = new QLabel(row);
-	widgets.detail->setTextFormat(Qt::PlainText);
-	widgets.detail->setWordWrap(true);
+	widgets.state->setTextFormat(Qt::PlainText);
+	widgets.state->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	widgets.stats = new QLabel(row);
-	widgets.start = new QPushButton(obs_module_text("Dock.Start"), row);
-	widgets.stop = new QPushButton(obs_module_text("Dock.Stop"), row);
-	widgets.edit = new QPushButton(obs_module_text("Dock.Edit"), row);
-	widgets.remove = new QPushButton(obs_module_text("Dock.Delete"), row);
+	widgets.stats->setTextFormat(Qt::PlainText);
+	widgets.stats->setWordWrap(true);
+	widgets.stats->hide();
+	widgets.detail = wrapping_label(row);
+	widgets.warning = wrapping_label(row);
+	widgets.warning->setStyleSheet("color: #e88020;");
+
+	widgets.toggle = new QToolButton(row);
+	widgets.toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	widgets.toggle->setIconSize(QSize(kButtonIconSize, kButtonIconSize));
+
+	auto *menu = new QMenu(row);
+	widgets.edit = menu->addAction(obs_module_text("Dock.Edit"));
+	menu->addSeparator();
+	widgets.remove = menu->addAction(obs_module_text("Dock.Delete"));
+	widgets.more = new QToolButton(row);
+	widgets.more->setAutoRaise(true);
+	widgets.more->setPopupMode(QToolButton::InstantPopup);
+	widgets.more->setStyleSheet("QToolButton::menu-indicator { image: none; }");
+	widgets.more->setIconSize(QSize(kButtonIconSize, kButtonIconSize));
+	widgets.more->setToolTip(obs_module_text("Dock.More"));
+	widgets.more->setAccessibleName(obs_module_text("Dock.More"));
+	widgets.more->setMenu(menu);
 
 	const QString id = view.id;
-	connect(widgets.start, &QPushButton::clicked, this, [this, id] { emit start_requested(id); });
-	connect(widgets.stop, &QPushButton::clicked, this, [this, id] { emit stop_requested(id); });
-	connect(widgets.edit, &QPushButton::clicked, this, [this, id] { emit edit_requested(id); });
-	connect(widgets.remove, &QPushButton::clicked, this, [this, id] { emit delete_requested(id); });
+	connect(widgets.toggle, &QToolButton::clicked, this, [this, id] {
+		const auto found = rows_.find(id);
+		if (found != rows_.end()) {
+			if (found->second.stops) {
+				emit stop_requested(id);
+			} else {
+				emit start_requested(id);
+			}
+		}
+	});
+	connect(widgets.edit, &QAction::triggered, this, [this, id] { emit edit_requested(id); });
+	connect(widgets.remove, &QAction::triggered, this, [this, id] { emit delete_requested(id); });
 
 	auto *title_line = new QHBoxLayout();
+	title_line->setSpacing(6);
+	title_line->addWidget(widgets.icon);
 	title_line->addWidget(name, 1);
 	title_line->addWidget(source);
 
 	auto *status_line = new QHBoxLayout();
-	status_line->addWidget(widgets.state);
-	status_line->addStretch();
-	status_line->addWidget(widgets.stats);
-
-	auto *button_line = new QHBoxLayout();
-	button_line->addWidget(widgets.start);
-	button_line->addWidget(widgets.stop);
-	button_line->addStretch();
-	button_line->addWidget(widgets.edit);
-	button_line->addWidget(widgets.remove);
+	status_line->setSpacing(4);
+	status_line->addWidget(widgets.dot);
+	status_line->addWidget(widgets.state, 1);
+	status_line->addWidget(widgets.toggle);
+	status_line->addWidget(widgets.more);
 
 	auto *layout = new QVBoxLayout(row);
+	layout->setContentsMargins(6, 4, 6, 4);
+	layout->setSpacing(2);
 	layout->addLayout(title_line);
 	layout->addLayout(status_line);
+	layout->addWidget(widgets.stats);
 	layout->addWidget(widgets.detail);
-	layout->addLayout(button_line);
+	layout->addWidget(widgets.warning);
 
 	apply_status(widgets, view.status);
+	apply_row_icons(widgets);
 	rows_.emplace(view.id, widgets);
 	return row;
 }
 
-void DestinationsDock::apply_status(const RowWidgets &widgets, const DestinationRowStatus &status)
+void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowStatus &status)
 {
 	widgets.state->setText(status.state);
+	widgets.state->setToolTip(status.detail);
 	widgets.detail->setText(status.detail);
 	widgets.detail->setVisible(!status.detail.isEmpty());
+	widgets.warning->setText(status.warning);
+	widgets.warning->setVisible(!status.warning.isEmpty());
 	widgets.stats->setText(status.stats);
-	widgets.start->setEnabled(status.can_start);
-	widgets.stop->setEnabled(status.can_stop);
+	widgets.stats->setVisible(!status.stats.isEmpty());
+
+	const bool changed = widgets.stops != status.can_stop || widgets.tone != status.tone;
+	widgets.stops = status.can_stop;
+	widgets.tone = status.tone;
+	const char *const label = status.can_stop ? "Dock.Stop" : "Dock.Start";
+	widgets.toggle->setText(obs_module_text(label));
+	widgets.toggle->setAccessibleName(obs_module_text(label));
+	widgets.toggle->setEnabled(status.can_start || status.can_stop);
 	widgets.edit->setEnabled(status.can_edit);
 	widgets.remove->setEnabled(status.can_edit);
+	if (changed) {
+		apply_row_icons(widgets);
+	}
+}
+
+void DestinationsDock::apply_row_icons(RowWidgets &widgets)
+{
+	const qreal ratio = devicePixelRatioF();
+	widgets.icon->setPixmap(themed_pixmap(widgets.icon_file.c_str(), palette(), kPlatformIconSize, ratio));
+	widgets.dot->setPixmap(status_dot(widgets.tone, palette(), ratio));
+	widgets.toggle->setIcon(themed_icon(widgets.stops ? "icons/ui/stop.svg" : "icons/ui/start.svg", palette()));
+	widgets.more->setIcon(themed_icon("icons/ui/more.svg", palette()));
+}
+
+void DestinationsDock::changeEvent(QEvent *event)
+{
+	QWidget::changeEvent(event);
+	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange) {
+		for (auto &[id, widgets] : rows_) {
+			apply_row_icons(widgets);
+		}
+	}
 }
 
 } // namespace multistream

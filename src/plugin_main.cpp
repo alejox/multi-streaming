@@ -183,6 +183,7 @@ void activate_features()
 	if (!obs_frontend_add_dock_by_id(kDockId, obs_module_text("MultiStream"), dock)) {
 		obs_log(LOG_ERROR, "could not add the destinations dock");
 		delete dock;
+		dock = nullptr;
 		composition->engine.set_destinations(std::move(load.config.destinations));
 	} else {
 		if (load.problem) {
@@ -204,7 +205,8 @@ void activate_features()
 
 #if defined(MULTI_STREAM_E2E_SECRETS)
 	composition->e2e_commands = std::make_unique<multistream::E2eCommands>(
-		module_config_path("e2e-commands.txt"), composition->engine, composition->vertical, vertical_dock);
+		module_config_path("e2e-commands.txt"), composition->engine, composition->vertical, vertical_dock, dock,
+		composition->vertical_controller);
 #endif
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);

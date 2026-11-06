@@ -1,6 +1,7 @@
 #include "streaming/streaming_engine.hpp"
 
 #include "destinations/connect_gate.hpp"
+#include "destinations/reconnect_history.hpp"
 #include "destinations/session_selection.hpp"
 #include "destinations/validation.hpp"
 
@@ -31,6 +32,11 @@ std::uint64_t now_ns()
 {
 	const auto now = std::chrono::steady_clock::now().time_since_epoch();
 	return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+}
+
+double now_seconds()
+{
+	return static_cast<double>(now_ns()) / 1000000000.0;
 }
 
 std::int64_t now_ms()
@@ -70,6 +76,7 @@ struct StreamingEngine::Slot {
 
 	mutable std::mutex session_mutex;
 	Session session;
+	ReconnectHistory reconnects;
 
 	// UI thread only.
 	std::shared_ptr<OutputLink> link;
@@ -284,6 +291,7 @@ void StreamingEngine::start(const std::vector<std::string> &ids)
 			if (!slot->session.request_start()) {
 				continue;
 			}
+			slot->reconnects.reset();
 		}
 		slot->counters = {};
 		slot->counters.timestamp_ns = now_ns();
@@ -493,6 +501,7 @@ void StreamingEngine::on_output_started(void *data, calldata_t *)
 	{
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.output_started();
+		slot->reconnects.connected();
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -533,6 +542,7 @@ void StreamingEngine::on_output_reconnecting(void *data, calldata_t *)
 	{
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.connection_lost();
+		slot->reconnects.retry_scheduled(now_seconds());
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -546,6 +556,7 @@ void StreamingEngine::on_output_reconnected(void *data, calldata_t *)
 	{
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.reconnected();
+		slot->reconnects.connected();
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -794,6 +805,8 @@ DestinationStatus StreamingEngine::status_of(const Slot &slot)
 		const std::lock_guard<std::mutex> lock(slot.session_mutex);
 		status.state = slot.session.state();
 		status.failure_reason = slot.session.failure_reason();
+		status.reconnect_attempt = slot.reconnects.attempt();
+		status.flapping = slot.reconnects.flapping(now_seconds());
 	}
 	if (status.state == SessionState::Live || status.state == SessionState::Reconnecting) {
 		status.stats = slot.stats;

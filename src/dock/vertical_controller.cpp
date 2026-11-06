@@ -39,6 +39,17 @@ std::optional<std::int64_t> as_selection(std::int64_t id)
 	return id != 0 ? std::make_optional(id) : std::nullopt;
 }
 
+bool confirm(QWidget *parent, const QString &title, const QString &question)
+{
+	QMessageBox box(QMessageBox::Question, title, question, QMessageBox::Yes | QMessageBox::No, parent);
+	box.setDefaultButton(QMessageBox::No);
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	// A native alert has no Qt widget for the test hook to answer.
+	box.setOption(QMessageBox::Option::DontUseNativeDialog);
+#endif
+	return box.exec() == QMessageBox::Yes;
+}
+
 std::string data_icon_for(const std::string &type_id)
 {
 	return source_icon_file(source_icon_for_type(type_id));
@@ -290,7 +301,7 @@ void VerticalController::remove_item(std::int64_t id)
 		return;
 	}
 	const QString question = text("Vertical.RemoveSourceQuestion").arg(QString::fromStdString(found->name));
-	if (QMessageBox::question(dock_, text("Vertical.RemoveSourceTitle"), question) == QMessageBox::Yes) {
+	if (confirm(dock_, text("Vertical.RemoveSourceTitle"), question)) {
 		canvas_.remove_item(id);
 		canvas_.save_collection();
 	}
@@ -338,7 +349,7 @@ void VerticalController::remove_scene(const QString &name)
 		return;
 	}
 	const QString question = text("Vertical.RemoveSceneQuestion").arg(name);
-	if (QMessageBox::question(dock_, text("Vertical.RemoveSceneTitle"), question) != QMessageBox::Yes) {
+	if (!confirm(dock_, text("Vertical.RemoveSceneTitle"), question)) {
 		return;
 	}
 	if (!canvas_.remove_scene(name.toStdString()) && dock_) {

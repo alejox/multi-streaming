@@ -24,9 +24,9 @@ QString text(const char *key)
 	return QString::fromUtf8(obs_module_text(key));
 }
 
-QString state_text(SessionState state)
+QString state_text(const DestinationStatus &status)
 {
-	switch (state) {
+	switch (status.state) {
 	case SessionState::Idle:
 		return text("State.Idle");
 	case SessionState::Starting:
@@ -34,7 +34,9 @@ QString state_text(SessionState state)
 	case SessionState::Live:
 		return text("State.Live");
 	case SessionState::Reconnecting:
-		return text("State.Reconnecting");
+		return status.reconnect_attempt > 0
+			       ? text("State.ReconnectingAttempt").arg(status.reconnect_attempt)
+			       : text("State.Reconnecting");
 	case SessionState::Stopping:
 		return text("State.Stopping");
 	case SessionState::Failed:
@@ -43,13 +45,35 @@ QString state_text(SessionState state)
 	return {};
 }
 
+RowTone tone_of(SessionState state)
+{
+	switch (state) {
+	case SessionState::Idle:
+		return RowTone::Idle;
+	case SessionState::Starting:
+	case SessionState::Stopping:
+		return RowTone::Busy;
+	case SessionState::Live:
+		return RowTone::Live;
+	case SessionState::Reconnecting:
+		return RowTone::Warning;
+	case SessionState::Failed:
+		return RowTone::Failed;
+	}
+	return RowTone::Idle;
+}
+
 DestinationRowStatus row_status(const DestinationStatus &status)
 {
 	const RowActions actions = row_actions(status.state);
 
 	DestinationRowStatus row;
-	row.state = state_text(status.state);
+	row.state = state_text(status);
+	row.tone = tone_of(status.state);
 	row.detail = QString::fromStdString(status.failure_reason);
+	if (status.flapping) {
+		row.warning = text("Dock.FlappingWarning");
+	}
 	row.can_start = actions.can_start;
 	row.can_stop = actions.can_stop;
 	row.can_edit = actions.can_edit;
@@ -205,6 +229,8 @@ void DockController::refresh_rows()
 		row.id = QString::fromStdString(destination.id);
 		row.name = QString::fromStdString(destination.name);
 		row.source = text(destination.video_source == VideoSource::Vertical ? "Source.Vertical" : "Source.Main");
+		row.icon_file = std::string("icons/platforms/") +
+				platform_id(effective_platform(destination.platform, destination.server_url)) + ".svg";
 
 		const auto status = std::find_if(statuses.begin(), statuses.end(), [&](const DestinationStatus &candidate) {
 			return candidate.id == destination.id;

@@ -1,6 +1,8 @@
 #include "e2e/e2e_commands.hpp"
 
 #include "destinations/vertical_settings.hpp"
+#include "dock/destinations_dock.hpp"
+#include "dock/vertical_controller.hpp"
 #include "dock/vertical_dock.hpp"
 #include "dock/vertical_preview.hpp"
 #include "streaming/streaming_engine.hpp"
@@ -10,24 +12,43 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#include <QApplication>
 #include <QCoreApplication>
+#include <QDockWidget>
+#include <QImageReader>
+#include <QInputDialog>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QListWidget>
+#include <QMessageBox>
 #include <QMouseEvent>
+#include <QPixmap>
+#include <QToolButton>
 
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace multistream {
 
-E2eCommands::E2eCommands(std::string path, StreamingEngine &engine, VerticalCanvas &canvas, VerticalDock *dock)
+E2eCommands::E2eCommands(std::string path, StreamingEngine &engine, VerticalCanvas &canvas, VerticalDock *dock,
+			 DestinationsDock *destinations_dock, const std::unique_ptr<VerticalController> &controller)
 	: path_(std::move(path)),
 	  engine_(engine),
 	  canvas_(canvas),
-	  dock_(dock)
+	  dock_(dock),
+	  destinations_dock_(destinations_dock),
+	  controller_(controller)
 {
 	connect(&timer_, &QTimer::timeout, this, &E2eCommands::poll);
 	timer_.start(100);
+	connect(&answer_timer_, &QTimer::timeout, this, [this] {
+		if (auto_answer_) {
+			answer_dialogs();
+		}
+	});
+	answer_timer_.start(150);
 }
 
 void E2eCommands::poll()
@@ -37,18 +58,29 @@ void E2eCommands::poll()
 		return;
 	}
 
-	std::string line;
-	while (std::getline(file, line)) {
+	std::vector<std::string> lines;
+	for (std::string line; std::getline(file, line);) {
+		lines.push_back(line);
+	}
+	file.close();
+	std::remove(path_.c_str());
+
+	for (const std::string &line : lines) {
 		std::istringstream fields(line);
 		std::string command;
 		std::string argument;
 		fields >> command;
 		std::getline(fields >> std::ws, argument);
-		obs_log(LOG_INFO, "e2e command: %s %s", command.c_str(), argument.c_str());
-		run(command, argument);
+		// Queued, because a command can sit in a dialog's event loop, and macOS does not
+		// fire timers in a loop nested inside a timer's own callback.
+		QMetaObject::invokeMethod(
+			this,
+			[this, command, argument] {
+				obs_log(LOG_INFO, "e2e command: %s %s", command.c_str(), argument.c_str());
+				run(command, argument);
+			},
+			Qt::QueuedConnection);
 	}
-	file.close();
-	std::remove(path_.c_str());
 }
 
 void E2eCommands::run(const std::string &command, const std::string &argument)
@@ -96,6 +128,14 @@ void E2eCommands::run(const std::string &command, const std::string &argument)
 			canvas_.move_item(id, VerticalCanvas::Move::Down);
 		} else if (argument == "remove") {
 			canvas_.remove_item(id);
+		} else if (argument == "lock") {
+			canvas_.set_item_locked(id, true);
+		} else if (argument == "unlock") {
+			canvas_.set_item_locked(id, false);
+		} else if (argument == "center") {
+			canvas_.center_item(id);
+		} else if (argument == "reset") {
+			canvas_.reset_item_transform(id);
 		}
 	} else if (command == "resolution") {
 		std::istringstream sides(argument);
@@ -114,6 +154,90 @@ void E2eCommands::run(const std::string &command, const std::string &argument)
 		// The dock's parent is the QDockWidget that OBS made for it.
 		if (QWidget *parent = dock_->parentWidget()) {
 			parent->show();
+		}
+	} else if (command == "show_destinations") {
+		if (destinations_dock_ && destinations_dock_->parentWidget() != nullptr) {
+			destinations_dock_->parentWidget()->show();
+		}
+	} else if (command == "resize_dock") {
+		std::istringstream fields(argument);
+		std::string which;
+		int width = 0;
+		int height = 0;
+		fields >> which >> width >> height;
+		QWidget *widget = which == "vertical" ? static_cast<QWidget *>(dock_) : destinations_dock_.data();
+		if (widget != nullptr && widget->parentWidget() != nullptr) {
+			widget->parentWidget()->resize(width, height);
+		}
+	} else if (command == "auto_answer") {
+		auto_answer_ = argument == "on";
+	} else if (command == "grab") {
+		grab(argument);
+	} else if (command == "overlay_probe") {
+		VerticalPreview *preview = dock_->preview();
+		const qreal ratio = preview->devicePixelRatioF();
+		const int width = static_cast<int>(preview->width() * ratio);
+		const int height = static_cast<int>(preview->height() * ratio);
+		const CanvasSize size = canvas_.canvas_size();
+		const PreviewMapping mapping(static_cast<int>(size.width), static_cast<int>(size.height), width, height);
+		const auto selected = preview->selected_item();
+		const std::optional<PreviewItem> item = selected ? canvas_.preview_item(*selected) : std::nullopt;
+		if (item) {
+			const Vec2 first = mapping.to_window(item->box.origin);
+			const Vec2 last = mapping.to_window(box_point(item->box, 1.0, 1.0));
+			obs_log(LOG_INFO, "e2e overlay expected box in window pixels: %.1f,%.1f-%.1f,%.1f ratio %.1f window %dx%d",
+				first.x, first.y, last.x, last.y, ratio, width, height);
+		}
+		obs_log(LOG_INFO, "e2e overlay red pixels: %s",
+			canvas_.preview_target()
+				->probe_overlay(static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height))
+				.c_str());
+	} else if (command == "float_dock") {
+		if (auto *parent = qobject_cast<QDockWidget *>(dock_->parentWidget())) {
+			parent->setFloating(true);
+		}
+	} else if (command == "source_list_select") {
+		// As a click in the list does.
+		auto *list = dock_->findChild<QListWidget *>("vertical-sources");
+		list->setCurrentRow(std::stoi(argument));
+		obs_log(LOG_INFO, "e2e list row %s selects in preview: %lld", argument.c_str(),
+			static_cast<long long>(dock_->preview()->selected_item().value_or(0)));
+	} else if (command == "dock_widgets") {
+		log_dock_widgets();
+	} else if (command == "svg_formats") {
+		obs_log(LOG_INFO, "e2e svg image format available: %d",
+			QImageReader::supportedImageFormats().contains("svg"));
+	} else if (command == "list_types") {
+		for (const InputType &type : canvas_.creatable_input_types()) {
+			obs_log(LOG_INFO, "e2e type %s (%s)", type.id.c_str(), type.display_name.c_str());
+		}
+		for (const std::string &name : canvas_.main_sources()) {
+			obs_log(LOG_INFO, "e2e existing video source %s", name.c_str());
+		}
+	} else if (command == "new_source") {
+		// The Add source menu's own action. A new source is named by its dialog.
+		if (controller_) {
+			for (const InputType &type : canvas_.creatable_input_types()) {
+				if (type.unversioned_id == argument) {
+					controller_->add_new_source(type);
+				}
+			}
+		}
+	} else if (command == "scene_list_rename") {
+		std::istringstream names(argument);
+		std::string from;
+		std::string to;
+		names >> from >> to;
+		emit dock_->rename_scene_requested(QString::fromStdString(from), QString::fromStdString(to));
+	} else if (command == "remove_scene_requested") {
+		emit dock_->remove_scene_requested(QString::fromStdString(argument));
+	} else if (command == "resolution_ui") {
+		std::istringstream sides(argument);
+		int width = 0;
+		int height = 0;
+		sides >> width >> height;
+		if (controller_) {
+			controller_->change_resolution(width, height);
 		}
 	} else if (command == "preview_mouse") {
 		preview_mouse(argument);
@@ -203,6 +327,54 @@ void E2eCommands::preview_key(const std::string &argument)
 	QKeyEvent press(QEvent::KeyPress, key, modifiers);
 	QCoreApplication::sendEvent(preview, &press);
 	obs_log(LOG_INFO, "e2e preview_key %s: claimed shortcut=%d", name.c_str(), shortcut.isAccepted());
+}
+
+// "<vertical|destinations> <file>". QWidget::grab of this plugin's own docks only. The
+// preview is a native surface, so it comes out blank.
+void E2eCommands::grab(const std::string &argument)
+{
+	std::istringstream fields(argument);
+	std::string which;
+	std::string file;
+	fields >> which;
+	std::getline(fields >> std::ws, file);
+
+	QWidget *widget = which == "vertical" ? static_cast<QWidget *>(dock_) : destinations_dock_.data();
+	if (widget == nullptr) {
+		return;
+	}
+	obs_log(LOG_INFO, "e2e grab %s: %dx%d saved=%d", which.c_str(), widget->width(), widget->height(),
+		widget->grab().save(QString::fromStdString(file)));
+}
+
+// Says yes to this plugin's dialogs, so that their real code runs.
+void E2eCommands::answer_dialogs()
+{
+	QWidget *modal = QApplication::activeModalWidget();
+	if (auto *box = qobject_cast<QMessageBox *>(modal)) {
+		obs_log(LOG_INFO, "e2e dialog question: %s", box->text().toUtf8().constData());
+		if (QAbstractButton *yes = box->button(QMessageBox::Yes)) {
+			yes->click();
+		} else {
+			box->accept();
+		}
+	} else if (auto *input = qobject_cast<QInputDialog *>(modal)) {
+		obs_log(LOG_INFO, "e2e dialog name: %s", input->textValue().toUtf8().constData());
+		input->accept();
+	}
+}
+
+void E2eCommands::log_dock_widgets()
+{
+	for (const QToolButton *button : dock_->findChildren<QToolButton *>()) {
+		obs_log(LOG_INFO, "e2e tool: accessible='%s' tooltip='%s' icon=%d enabled=%d",
+			button->accessibleName().toUtf8().constData(), button->toolTip().toUtf8().constData(),
+			!button->icon().isNull(), button->isEnabled());
+	}
+	for (const QListWidget *list : dock_->findChildren<QListWidget *>()) {
+		obs_log(LOG_INFO, "e2e list rows=%d current=%d size=%dx%d", list->count(), list->currentRow(),
+			list->width(), list->height());
+	}
 }
 
 void E2eCommands::dump_items()

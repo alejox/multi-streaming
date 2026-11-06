@@ -28,6 +28,7 @@ endfunction()
 
 add_core_test(runtime_requirements_test destinations/runtime_requirements_test.cpp)
 add_core_test(reconnect_policy_test destinations/reconnect_policy_test.cpp)
+add_core_test(reconnect_history_test destinations/reconnect_history_test.cpp)
 add_core_test(destination_validation_test destinations/destination_validation_test.cpp)
 add_core_test(config_codec_test destinations/config_codec_test.cpp)
 add_core_test(stream_stats_test destinations/stream_stats_test.cpp)

@@ -51,6 +51,12 @@ public:
 
 	std::uint64_t rendered_frames() const { return rendered_frames_; }
 
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	// Draws the marks into a texture and reports their red pixels, since no other test can
+	// see a native surface. Enters the graphics context itself. Returns "count x0,y0-x1,y1".
+	std::string probe_overlay(std::uint32_t window_width, std::uint32_t window_height);
+#endif
+
 private:
 	void draw_overlay(std::uint32_t window_width, std::uint32_t window_height) const;
 

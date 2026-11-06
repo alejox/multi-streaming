@@ -244,6 +244,54 @@ void VerticalPreviewTarget::draw_overlay(std::uint32_t window_width, std::uint32
 	gs_viewport_pop();
 }
 
+#if defined(MULTI_STREAM_E2E_SECRETS)
+std::string VerticalPreviewTarget::probe_overlay(std::uint32_t window_width, std::uint32_t window_height)
+{
+	const std::lock_guard<std::mutex> lock(mutex_);
+	long count = 0;
+	std::uint32_t left = window_width;
+	std::uint32_t top = window_height;
+	std::uint32_t right = 0;
+	std::uint32_t bottom = 0;
+
+	obs_enter_graphics();
+	gs_texrender_t *render = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+	gs_stagesurf_t *stage = gs_stagesurface_create(window_width, window_height, GS_RGBA);
+	if (gs_texrender_begin(render, window_width, window_height)) {
+		vec4 clear;
+		vec4_zero(&clear);
+		gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
+		draw_overlay(window_width, window_height);
+		gs_texrender_end(render);
+		gs_stage_texture(stage, gs_texrender_get_texture(render));
+
+		std::uint8_t *data = nullptr;
+		std::uint32_t line_size = 0;
+		if (gs_stagesurface_map(stage, &data, &line_size)) {
+			for (std::uint32_t y = 0; y < window_height; ++y) {
+				for (std::uint32_t x = 0; x < window_width; ++x) {
+					const std::uint8_t *pixel = data + y * line_size + x * 4;
+					if (pixel[0] > 200 && pixel[1] < 50 && pixel[2] < 50 && pixel[3] > 200) {
+						++count;
+						left = std::min(left, x);
+						right = std::max(right, x);
+						top = std::min(top, y);
+						bottom = std::max(bottom, y);
+					}
+				}
+			}
+			gs_stagesurface_unmap(stage);
+		}
+	}
+	gs_stagesurface_destroy(stage);
+	gs_texrender_destroy(render);
+	obs_leave_graphics();
+
+	return std::to_string(count) + " " + std::to_string(left) + "," + std::to_string(top) + "-" +
+	       std::to_string(right) + "," + std::to_string(bottom);
+}
+#endif
+
 VerticalCanvas::VerticalCanvas(std::filesystem::path settings_path)
 	: settings_path_(std::move(settings_path)),
 	  settings_(load_vertical_settings(settings_path_))

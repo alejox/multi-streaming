@@ -49,6 +49,9 @@ struct DestinationStatus {
 	std::string failure_reason;
 	StreamStats stats;
 	std::uint64_t dropped_frames = 0;
+	// The retry in progress, from 1. 0 while connected.
+	int reconnect_attempt = 0;
+	bool flapping = false;
 };
 
 class StreamingEngine {
