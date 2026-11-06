@@ -43,13 +43,39 @@ Out of scope:
 
 ## Tasks
 
+Written but not compiled on the target stays unchecked until CI proves it.
+
 - [ ] T1 Linux secret store via libsecret, wired into `platform_secret_store` and CMake.
-      Route: delegated (2+ non-trivial files).
+      Route: delegated (2+ non-trivial files). Commit `f1b1be7`. Only a syntax check against
+      a stub of libsecret was observed; CI must compile it and run both tests.
 - [ ] T2 Linux preview display in `VerticalPreview::create_display()`. Route: delegated.
-- [ ] T3 Linux build: `cmake/linux/`, preset, dependency handling. Route: delegated.
-- [ ] T4 GitHub Actions workflow for Windows and Linux with zip/tar artifacts. Route: delegated.
+      Commit `1877b1e`. Not compiled for Linux. Follows `OBSQTDisplay.cpp` in OBS 33.0.1.
+- [ ] T3 Linux build: `cmake/linux/`, preset, dependency handling. Route: delegated. Commit
+      `71e90ad`. Install layout observed with a throwaway project on macOS; not run on Linux.
+- [ ] T4 GitHub Actions workflow for Windows and Linux with zip/tar artifacts. Route:
+      delegated. Commit `3ce0002`. YAML parses; never run. `.github` is ignored by the root
+      `/*` rule, so the file was added with `git add -f`.
 - [ ] T5 Run CI, fix compile or test failures, download both packages. Route: parent operates
-      CI; fixes delegated.
+      CI; fixes delegated. Known failures to fix first are listed below.
+
+## Verification evidence
+
+On macOS after these changes: `cmake --build --preset macos` succeeded and 27 of 27 core
+tests passed.
+
+## Findings
+
+- The PPA has no OBS 33 for Ubuntu 24.04: noble has 32.2.0, resolute (26.04) has 33.0.0.
+  OBS 33.0.1 itself needs FFmpeg 8, so it cannot be built on 24.04 from distro packages.
+- Linux builds on 24.04 against 32.2.0. Every OBS function the plugin calls from `obs.h` and
+  `obs-frontend-api.h` has the same declaration in both versions. OBS rejects only plugins
+  built against a newer libobs, so this binary should load on 32.2 and 33.
+- Blockers outside the allowed edit surface, certain to fail the Windows job:
+  - `cmake/windows/helpers.cmake`: `install(TARGETS ... RUNTIME DESTINATION .)` on a MODULE
+    target fails configure with "given no LIBRARY DESTINATION" (reproduced on macOS).
+  - `src/persistence/file_config_repository.cpp` and
+    `tests/persistence/file_config_repository_test.cpp` use POSIX (`unistd.h`, `fsync`,
+    `mkstemp`, `mkdtemp`).
 
 ## Acceptance criteria
 
@@ -63,4 +89,4 @@ Out of scope:
 
 ## Next step
 
-T1 through T4 through one bounded writer, then push and run CI.
+Fix the Windows blockers above, then push and run CI (T5).
