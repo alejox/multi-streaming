@@ -1,0 +1,22 @@
+# Exclude everything at the repository root
+/*
+
+# Except for project files
+!/cmake
+!/data
+!/odd
+!/src
+!/tests
+!/.clang-format
+!/.gitignore
+!/buildspec.json
+!/CMakeLists.txt
+!/CMakePresets.json
+!/LICENSE
+!/README.md
+
+# Exclude macOS resource forks
+.DS_Store
+
+# Exclude the CMake build number cache
+/cmake/.CMakeBuildNumber

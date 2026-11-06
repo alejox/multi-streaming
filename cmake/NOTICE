@@ -1,0 +1,7 @@
+The modules under cmake/common and cmake/macos, and src/plugin-support.*, are
+derived from obs-plugintemplate (https://github.com/obsproject/obs-plugintemplate,
+commit 3e7d7ac), licensed under the GNU General Public License version 2.
+
+Local changes: removed .pkg creation from the install step, removed the Windows
+and Linux modules, made the libobs build honor CMAKE_OSX_ARCHITECTURES, and
+defaulted the build number outside CI.

@@ -1,0 +1,39 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "macos",
+      "displayName": "macOS arm64",
+      "description": "Build for macOS 13.0+ on arm64, matching the OBS 33.0.1 minimum system version",
+      "binaryDir": "${sourceDir}/build_macos",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "generator": "Xcode",
+      "warnings": {"dev": true, "deprecated": true},
+      "cacheVariables": {
+        "ENABLE_FRONTEND_API": true,
+        "ENABLE_QT": true,
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CODESIGN_IDENTITY": "$penv{CODESIGN_IDENT}",
+        "CODESIGN_TEAM": "$penv{CODESIGN_TEAM}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos",
+      "configurePreset": "macos",
+      "displayName": "macOS arm64",
+      "configuration": "RelWithDebInfo"
+    }
+  ]
+}
