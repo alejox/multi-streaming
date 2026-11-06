@@ -122,3 +122,56 @@ TEST_CASE(a_degenerate_window_or_base_gives_an_empty_viewport)
 	CHECK_EQ(fit_viewport(1080, 1920, 0, 100).width, 0);
 	CHECK_EQ(fit_viewport(0, 0, 100, 100).width, 0);
 }
+
+TEST_CASE(scene_order_round_trips)
+{
+	multistream::VerticalSettings settings;
+	settings.scene_order = {"B", "A"};
+	const auto decoded = multistream::decode_vertical_settings(multistream::encode_vertical_settings(settings));
+	REQUIRE(decoded.has_value());
+	REQUIRE(decoded->scene_order.size() == 2);
+	CHECK_EQ(decoded->scene_order[0], "B");
+}
+
+TEST_CASE(settings_without_a_scene_order_still_load)
+{
+	const auto decoded = multistream::decode_vertical_settings(R"({"width":720,"height":1280})");
+	REQUIRE(decoded.has_value());
+	CHECK(decoded->scene_order.empty());
+}
+
+TEST_CASE(a_scene_order_of_the_wrong_type_is_ignored)
+{
+	const auto decoded = multistream::decode_vertical_settings(R"({"width":720,"height":1280,"scene_order":3})");
+	REQUIRE(decoded.has_value());
+	CHECK(decoded->scene_order.empty());
+}
+
+TEST_CASE(ordering_scenes_keeps_known_names_in_order_and_new_ones_after)
+{
+	const auto ordered = multistream::order_scenes({"A", "B", "C", "D"}, {"C", "gone", "A"});
+	REQUIRE(ordered.size() == 4);
+	CHECK_EQ(ordered[0], "C");
+	CHECK_EQ(ordered[1], "A");
+	CHECK_EQ(ordered[2], "B");
+	CHECK_EQ(ordered[3], "D");
+}
+
+TEST_CASE(moving_a_scene_swaps_it_with_its_neighbor)
+{
+	const std::vector<std::string> scenes = {"A", "B", "C"};
+	const auto up = multistream::move_scene(scenes, "C", true);
+	CHECK_EQ(up[1], "C");
+	CHECK_EQ(up[2], "B");
+	const auto down = multistream::move_scene(scenes, "A", false);
+	CHECK_EQ(down[0], "B");
+	CHECK_EQ(down[1], "A");
+}
+
+TEST_CASE(moving_a_scene_past_the_ends_or_unknown_changes_nothing)
+{
+	const std::vector<std::string> scenes = {"A", "B"};
+	CHECK(multistream::move_scene(scenes, "A", true) == scenes);
+	CHECK(multistream::move_scene(scenes, "B", false) == scenes);
+	CHECK(multistream::move_scene(scenes, "Z", true) == scenes);
+}

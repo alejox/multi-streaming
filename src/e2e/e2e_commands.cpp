@@ -76,7 +76,7 @@ void E2eCommands::run(const std::string &command, const std::string &argument)
 		names >> from >> to;
 		obs_log(LOG_INFO, "e2e rename_scene: %d", canvas_.rename_scene(from, to));
 	} else if (command == "add_source") {
-		obs_log(LOG_INFO, "e2e add_source: %d", canvas_.add_source(argument));
+		obs_log(LOG_INFO, "e2e add_source: %d", canvas_.add_source(argument).has_value());
 	} else if (command == "top_item") {
 		// One verb per action on the topmost item, enough for the checks.
 		const auto items = canvas_.items();

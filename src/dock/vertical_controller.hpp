@@ -9,6 +9,10 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
+
+#include <string>
+#include <vector>
 
 namespace multistream {
 
@@ -20,18 +24,31 @@ public:
 	VerticalController(VerticalCanvas &canvas, StreamingEngine &engine, VerticalDock *dock);
 	~VerticalController() override;
 
+	// Asks for a name, adds a new source of that type, and opens its properties.
+	void add_new_source(const InputType &type);
+	// Asks which of the existing sources to add, with a search box.
+	void add_existing_source();
+	void change_resolution(int width, int height);
+
 private:
 	void refresh();
+	void refresh_if_changed();
 	void show_item_menu(std::int64_t id, const QPoint &global_position);
+	void show_add_source_menu(const QPoint &global_position);
+	void select_new_item(std::int64_t id);
 	void remove_item(std::int64_t id);
+	void remove_hidden_audio();
 	void add_scene();
-	void rename_scene(const QString &name);
+	void rename_scene(const QString &name, const QString &new_name);
 	void remove_scene(const QString &name);
-	void change_resolution(int width, int height);
+	void edit_resolution();
+	std::string snapshot() const;
 
 	VerticalCanvas &canvas_;
 	StreamingEngine &engine_;
 	QPointer<VerticalDock> dock_;
+	QTimer change_timer_;
+	std::string shown_snapshot_;
 };
 
 } // namespace multistream

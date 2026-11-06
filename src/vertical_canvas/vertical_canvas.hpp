@@ -13,6 +13,7 @@
 #include "destinations/vertical_settings.hpp"
 #include "streaming/video_sources.hpp"
 #include "vertical_canvas/preview_geometry.hpp"
+#include "vertical_canvas/source_catalog.hpp"
 
 #include <obs.hpp>
 
@@ -104,13 +105,19 @@ public:
 	bool rename_scene(const std::string &name, const std::string &new_name);
 	bool remove_scene(const std::string &name);
 	bool switch_scene(const std::string &name);
+	bool move_scene(const std::string &name, bool up);
 
-	// The main canvas's sources, which can be added to a scene.
+	// The main canvas's video sources, which can be added to a scene.
 	std::vector<std::string> main_sources() const;
+	std::vector<InputType> creatable_input_types() const;
 
 	// Top of the stack first, in the active scene.
 	std::vector<VerticalItem> items() const;
-	bool add_source(const std::string &name);
+	// These return the new item in the active scene.
+	std::optional<std::int64_t> add_source(const std::string &name);
+	std::optional<std::int64_t> create_source(const std::string &type_id, const std::string &name);
+	bool source_name_taken(const std::string &name) const;
+	bool open_item_properties(std::int64_t id);
 	bool remove_item(std::int64_t id);
 	enum class Move { Up, Down, Top, Bottom };
 	bool move_item(std::int64_t id, Move move);
@@ -149,6 +156,7 @@ private:
 	OBSSceneItem find_item(std::int64_t id) const;
 	void place_item(obs_sceneitem_t *item, obs_bounds_type bounds) const;
 	void replace_bounds_of_all_items();
+	std::optional<std::int64_t> add_to_active_scene(obs_source_t *source);
 
 	std::filesystem::path settings_path_;
 	VerticalSettings settings_;

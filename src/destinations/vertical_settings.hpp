@@ -12,6 +12,8 @@ struct VerticalSettings {
 	int width = 1080;
 	int height = 1920;
 	std::string active_scene;
+	// libobs has no order for a canvas's scenes, so this list is the only record of it.
+	std::vector<std::string> scene_order;
 };
 
 // Even sizes are what the 4:2:0 encoders need; 8192 is a practical upper limit.
@@ -34,6 +36,12 @@ bool can_remove_scene(std::size_t scene_count);
 
 // The base name if it is free, else the base name with the lowest free number from 2.
 std::string unique_scene_name(const std::string &base, const std::vector<std::string> &existing);
+
+// The scenes in the wanted order. Names not in it follow, and names gone from it are dropped.
+std::vector<std::string> order_scenes(const std::vector<std::string> &scenes, const std::vector<std::string> &order);
+
+// Swaps the scene with its neighbor. Nothing changes at either end or for an unknown name.
+std::vector<std::string> move_scene(const std::vector<std::string> &ordered, const std::string &name, bool up);
 
 struct Viewport {
 	int x = 0;

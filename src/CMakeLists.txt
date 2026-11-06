@@ -31,6 +31,7 @@ add_library(
   destinations/validation.cpp
   destinations/vertical_settings.cpp
   vertical_canvas/preview_geometry.cpp
+  vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp
 )
 target_include_directories(multistream_core PUBLIC "${CMAKE_CURRENT_LIST_DIR}")

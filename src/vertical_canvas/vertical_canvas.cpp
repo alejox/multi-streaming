@@ -422,8 +422,9 @@ bool VerticalCanvas::rename_scene(const std::string &name, const std::string &ne
 	obs_source_set_name(source, new_name.c_str());
 	if (settings_.active_scene == name) {
 		settings_.active_scene = new_name;
-		persist();
 	}
+	std::replace(settings_.scene_order.begin(), settings_.scene_order.end(), name, new_name);
+	persist();
 	notify();
 	return true;
 }
@@ -465,16 +466,46 @@ bool VerticalCanvas::switch_scene(const std::string &name)
 	return true;
 }
 
+bool VerticalCanvas::move_scene(const std::string &name, bool up)
+{
+	settings_.scene_order = multistream::move_scene(scenes(), name, up);
+	persist();
+	notify();
+	return true;
+}
+
 std::vector<std::string> VerticalCanvas::main_sources() const
 {
 	std::vector<std::string> names;
 	obs_enum_sources(
 		[](void *param, obs_source_t *source) {
-			static_cast<std::vector<std::string> *>(param)->push_back(obs_source_get_name(source));
+			if ((obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO) != 0) {
+				static_cast<std::vector<std::string> *>(param)->push_back(obs_source_get_name(source));
+			}
 			return true;
 		},
 		&names);
 	return names;
+}
+
+std::vector<InputType> VerticalCanvas::creatable_input_types() const
+{
+	std::vector<InputType> types;
+	const char *id = nullptr;
+	const char *unversioned = nullptr;
+	for (size_t index = 0; obs_enum_input_types2(index, &id, &unversioned); ++index) {
+		const std::uint32_t flags = obs_get_source_output_flags(id);
+		const char *name = obs_source_get_display_name(id);
+		InputType type;
+		type.id = id;
+		type.unversioned_id = unversioned != nullptr ? unversioned : id;
+		type.display_name = name != nullptr ? name : id;
+		type.has_video = (flags & OBS_SOURCE_VIDEO) != 0;
+		type.disabled = (flags & OBS_SOURCE_CAP_DISABLED) != 0;
+		type.deprecated = (flags & OBS_SOURCE_DEPRECATED) != 0;
+		types.push_back(std::move(type));
+	}
+	return creatable_video_types(std::move(types));
 }
 
 std::vector<VerticalItem> VerticalCanvas::items() const
@@ -499,24 +530,55 @@ std::vector<VerticalItem> VerticalCanvas::items() const
 	return result;
 }
 
-bool VerticalCanvas::add_source(const std::string &name)
+std::optional<std::int64_t> VerticalCanvas::add_source(const std::string &name)
 {
-	if (!canvas_) {
-		return false;
+	OBSSourceAutoRelease source = obs_get_source_by_name(name.c_str());
+	return source ? add_to_active_scene(source) : std::nullopt;
+}
+
+std::optional<std::int64_t> VerticalCanvas::create_source(const std::string &type_id, const std::string &name)
+{
+	if (!canvas_ || name.empty() || source_name_taken(name)) {
+		return std::nullopt;
+	}
+	OBSSourceAutoRelease source = obs_source_create(type_id.c_str(), name.c_str(), nullptr, nullptr);
+	return source ? add_to_active_scene(source) : std::nullopt;
+}
+
+bool VerticalCanvas::source_name_taken(const std::string &name) const
+{
+	OBSSourceAutoRelease source = obs_get_source_by_name(name.c_str());
+	return static_cast<bool>(source);
+}
+
+std::optional<std::int64_t> VerticalCanvas::add_to_active_scene(obs_source_t *source)
+{
+	if (!canvas_ || (obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO) == 0) {
+		return std::nullopt;
 	}
 	OBSSourceAutoRelease channel = obs_canvas_get_channel(canvas_, 0);
 	obs_scene_t *scene = obs_scene_from_source(channel);
-	OBSSourceAutoRelease source = obs_get_source_by_name(name.c_str());
-	if (scene == nullptr || !source) {
-		return false;
+	if (scene == nullptr) {
+		return std::nullopt;
 	}
 
 	obs_sceneitem_t *item = obs_scene_add(scene, source);
 	if (item == nullptr) {
-		return false;
+		return std::nullopt;
 	}
 	place_item(item, OBS_BOUNDS_SCALE_INNER);
+	const std::int64_t id = obs_sceneitem_get_id(item);
 	notify();
+	return id;
+}
+
+bool VerticalCanvas::open_item_properties(std::int64_t id)
+{
+	OBSSceneItem item = find_item(id);
+	if (!item) {
+		return false;
+	}
+	obs_frontend_open_source_properties(obs_sceneitem_get_source(item));
 	return true;
 }
 

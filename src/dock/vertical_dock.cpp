@@ -1,31 +1,55 @@
 #include "dock/vertical_dock.hpp"
 
+#include "dock/icons.hpp"
 #include "dock/vertical_preview.hpp"
 
 #include <obs-module.h>
 
-#include <QComboBox>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
-#include <QSignalBlocker>
-#include <QSpinBox>
+#include <QResizeEvent>
+#include <QSplitter>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace multistream {
 namespace {
 
 constexpr int kItemIdRole = Qt::UserRole;
+constexpr int kSceneNameRole = Qt::UserRole + 1;
+constexpr int kStackBelowWidth = 380;
+constexpr int kRowIconSize = 16;
+
+constexpr const char *kVisibleIcon = "icons/ui/visible.svg";
+constexpr const char *kHiddenIcon = "icons/ui/hidden.svg";
+constexpr const char *kLockedIcon = "icons/ui/locked.svg";
+constexpr const char *kUnlockedIcon = "icons/ui/unlocked.svg";
+constexpr const char *kIconLabelName = "icon";
+constexpr const char *kNameLabelName = "name";
+constexpr const char *kVisibleButtonName = "visible";
+constexpr const char *kLockButtonName = "lock";
 
 QString text(const char *key)
 {
 	return QString::fromUtf8(obs_module_text(key));
 }
 
-QPushButton *button(const char *key)
+class SceneList final : public QListWidget {
+public:
+	bool editing() const { return state() == QAbstractItemView::EditingState; }
+};
+
+void set_toggle_look(QToolButton *button, bool on, const char *on_icon, const char *off_icon, const char *on_key,
+		     const char *off_key)
 {
-	return new QPushButton(text(key));
+	const QSignalBlocker blocker(button);
+	button->setChecked(on);
+	button->setIcon(themed_icon(on ? on_icon : off_icon, button->palette()));
+	const QString label = text(on ? on_key : off_key);
+	button->setToolTip(label);
+	button->setAccessibleName(label);
 }
 
 } // namespace
@@ -35,80 +59,94 @@ VerticalDock::VerticalDock(QWidget *parent)
 	  preview_(new VerticalPreview()),
 	  controls_(new QWidget()),
 	  message_(new QLabel()),
-	  scenes_(new QComboBox()),
-	  items_(new QListWidget()),
-	  main_sources_(new QComboBox()),
-	  width_(new QSpinBox()),
-	  height_(new QSpinBox())
+	  empty_hint_(new QLabel(text("Vertical.EmptyHint"))),
+	  resolution_(new QLabel()),
+	  audio_note_(new QLabel()),
+	  lists_(new QSplitter(Qt::Horizontal)),
+	  scenes_(new SceneList()),
+	  items_(new QListWidget())
 {
-	preview_->setMinimumHeight(240);
+	preview_->setMinimumHeight(160);
 	message_->setWordWrap(true);
+	message_->setTextFormat(Qt::PlainText);
 	message_->hide();
+	empty_hint_->setWordWrap(true);
+	empty_hint_->hide();
+	audio_note_->setWordWrap(true);
+	audio_note_->setTextFormat(Qt::RichText);
+	audio_note_->hide();
 
-	for (QSpinBox *side : {width_, height_}) {
-		side->setRange(2, 8192);
-		side->setSingleStep(2);
-	}
+	scenes_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+	items_->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-	auto *add_scene = button("Vertical.AddScene");
-	auto *rename_scene = button("Vertical.RenameScene");
-	auto *remove_scene = button("Vertical.RemoveScene");
-	auto *add_source = button("Vertical.AddSource");
-	auto *remove_item = button("Vertical.RemoveSource");
-	auto *move_up = button("Vertical.MoveUp");
-	auto *move_down = button("Vertical.MoveDown");
-	auto *fit = button("Vertical.Fit");
-	auto *fill = button("Vertical.Fill");
-	auto *apply = button("Vertical.ApplyResolution");
+	auto *add_scene = icon_button("icons/ui/add.svg", "Vertical.AddScene");
+	auto *remove_scene = icon_button("icons/ui/remove.svg", "Vertical.RemoveScene");
+	auto *scene_up = icon_button("icons/ui/up.svg", "Vertical.MoveSceneUp");
+	auto *scene_down = icon_button("icons/ui/down.svg", "Vertical.MoveSceneDown");
+	auto *add_source = icon_button("icons/ui/add.svg", "Vertical.AddSource");
+	auto *remove_item = icon_button("icons/ui/remove.svg", "Vertical.RemoveSource");
+	auto *item_up = icon_button("icons/ui/up.svg", "Vertical.MoveUp");
+	auto *item_down = icon_button("icons/ui/down.svg", "Vertical.MoveDown");
+	auto *settings = icon_button("icons/ui/settings.svg", "Vertical.ResolutionSettings");
 
-	auto *scene_row = new QHBoxLayout();
-	scene_row->addWidget(scenes_, 1);
-	scene_row->addWidget(add_scene);
-	scene_row->addWidget(rename_scene);
-	scene_row->addWidget(remove_scene);
+	lists_->addWidget(list_panel("Vertical.Scenes", scenes_, {add_scene, remove_scene, scene_up, scene_down}));
+	lists_->addWidget(list_panel("Vertical.Sources", items_, {add_source, remove_item, item_up, item_down}));
+	lists_->setStretchFactor(0, 1);
+	lists_->setStretchFactor(1, 2);
+	lists_->setChildrenCollapsible(false);
 
-	auto *source_row = new QHBoxLayout();
-	source_row->addWidget(main_sources_, 1);
-	source_row->addWidget(add_source);
-
-	auto *item_row = new QHBoxLayout();
-	item_row->addWidget(remove_item);
-	item_row->addWidget(move_up);
-	item_row->addWidget(move_down);
-	item_row->addWidget(fit);
-	item_row->addWidget(fill);
-
-	auto *resolution_row = new QHBoxLayout();
-	resolution_row->addWidget(new QLabel(text("Vertical.Resolution")));
-	resolution_row->addWidget(width_);
-	resolution_row->addWidget(height_);
-	resolution_row->addWidget(apply);
+	auto *status_row = new QHBoxLayout();
+	status_row->setContentsMargins(0, 0, 0, 0);
+	status_row->addStretch();
+	status_row->addWidget(resolution_);
+	status_row->addWidget(settings);
 
 	auto *controls = new QVBoxLayout(controls_);
 	controls->setContentsMargins(0, 0, 0, 0);
-	controls->addLayout(scene_row);
-	controls->addWidget(items_, 1);
-	controls->addLayout(item_row);
-	controls->addLayout(source_row);
-	controls->addLayout(resolution_row);
+	controls->addLayout(status_row);
+	controls->addWidget(empty_hint_);
+	controls->addWidget(message_);
+	controls->addWidget(lists_, 1);
+	controls->addWidget(audio_note_);
+
+	auto *outer = new QSplitter(Qt::Vertical);
+	outer->addWidget(preview_);
+	outer->addWidget(controls_);
+	outer->setStretchFactor(0, 3);
+	outer->setStretchFactor(1, 2);
+	outer->setChildrenCollapsible(false);
 
 	auto *layout = new QVBoxLayout(this);
-	layout->addWidget(preview_, 2);
-	layout->addWidget(message_);
-	layout->addWidget(controls_, 1);
+	layout->addWidget(outer);
 
-	connect(scenes_, &QComboBox::currentTextChanged, this, [this](const QString &name) {
-		if (!updating_ && !name.isEmpty()) {
-			emit scene_selected(name);
+	connect(scenes_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item, QListWidgetItem *) {
+		if (!updating_ && item != nullptr) {
+			emit scene_selected(item->data(kSceneNameRole).toString());
 		}
 	});
-	connect(add_scene, &QPushButton::clicked, this, [this] { emit add_scene_requested(); });
-	connect(rename_scene, &QPushButton::clicked, this, [this] { emit rename_scene_requested(scenes_->currentText()); });
-	connect(remove_scene, &QPushButton::clicked, this, [this] { emit remove_scene_requested(scenes_->currentText()); });
-	connect(add_source, &QPushButton::clicked, this, [this] {
-		if (!main_sources_->currentText().isEmpty()) {
-			emit add_source_requested(main_sources_->currentText());
+	connect(scenes_, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
+		if (!updating_) {
+			emit rename_scene_requested(item->data(kSceneNameRole).toString(), item->text().trimmed());
 		}
+	});
+	connect(add_scene, &QToolButton::clicked, this, [this] { emit add_scene_requested(); });
+	connect(remove_scene, &QToolButton::clicked, this, [this] {
+		if (!selected_scene().isEmpty()) {
+			emit remove_scene_requested(selected_scene());
+		}
+	});
+	connect(scene_up, &QToolButton::clicked, this, [this] {
+		if (!selected_scene().isEmpty()) {
+			emit move_scene_requested(selected_scene(), true);
+		}
+	});
+	connect(scene_down, &QToolButton::clicked, this, [this] {
+		if (!selected_scene().isEmpty()) {
+			emit move_scene_requested(selected_scene(), false);
+		}
+	});
+	connect(add_source, &QToolButton::clicked, this, [this, add_source] {
+		emit add_source_menu_requested(add_source->mapToGlobal(QPoint(0, add_source->height())));
 	});
 
 	const auto on_selected = [this](auto signal) {
@@ -118,31 +156,142 @@ VerticalDock::VerticalDock(QWidget *parent)
 			}
 		};
 	};
-	connect(remove_item, &QPushButton::clicked, this, on_selected(&VerticalDock::remove_item_requested));
-	connect(move_up, &QPushButton::clicked, this, on_selected(&VerticalDock::move_item_up_requested));
-	connect(move_down, &QPushButton::clicked, this, on_selected(&VerticalDock::move_item_down_requested));
-	connect(fit, &QPushButton::clicked, this, on_selected(&VerticalDock::fit_item_requested));
-	connect(fill, &QPushButton::clicked, this, on_selected(&VerticalDock::fill_item_requested));
+	connect(remove_item, &QToolButton::clicked, this, on_selected(&VerticalDock::remove_item_requested));
+	connect(item_up, &QToolButton::clicked, this, on_selected(&VerticalDock::move_item_up_requested));
+	connect(item_down, &QToolButton::clicked, this, on_selected(&VerticalDock::move_item_down_requested));
 
 	connect(items_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item, QListWidgetItem *) {
 		if (!updating_) {
 			emit item_selected(item != nullptr ? item->data(kItemIdRole).toLongLong() : 0);
 		}
 	});
-	connect(items_, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
-		if (!updating_) {
-			emit item_visibility_requested(item->data(kItemIdRole).toLongLong(),
-						       item->checkState() == Qt::Checked);
-		}
+	connect(items_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+		emit item_properties_requested(item->data(kItemIdRole).toLongLong());
 	});
-	connect(apply, &QPushButton::clicked, this, [this] { emit resolution_requested(width_->value(), height_->value()); });
+	connect(audio_note_, &QLabel::linkActivated, this, [this] { emit remove_hidden_audio_requested(); });
+	connect(settings, &QToolButton::clicked, this, [this] { emit resolution_settings_requested(); });
+}
+
+QToolButton *VerticalDock::icon_button(const char *icon_file, const char *tooltip_key)
+{
+	auto *button = new QToolButton();
+	button->setAutoRaise(true);
+	button->setIcon(themed_icon(icon_file, palette()));
+	button->setIconSize(QSize(kRowIconSize, kRowIconSize));
+	button->setToolTip(text(tooltip_key));
+	button->setAccessibleName(text(tooltip_key));
+	icon_buttons_.push_back({button, icon_file});
+	return button;
+}
+
+QWidget *VerticalDock::list_panel(const char *title_key, QListWidget *list, const std::vector<QToolButton *> &tools)
+{
+	auto *panel = new QWidget();
+	auto *title = new QLabel(text(title_key));
+	auto *toolbar = new QHBoxLayout();
+	toolbar->setContentsMargins(0, 0, 0, 0);
+	toolbar->setSpacing(0);
+	for (QToolButton *tool : tools) {
+		toolbar->addWidget(tool);
+	}
+	toolbar->addStretch();
+
+	auto *layout = new QVBoxLayout(panel);
+	layout->setContentsMargins(0, 0, 0, 0);
+	layout->setSpacing(2);
+	layout->addWidget(title);
+	layout->addWidget(list, 1);
+	layout->addLayout(toolbar);
+	return panel;
+}
+
+QWidget *VerticalDock::item_row(const VerticalItemView &view)
+{
+	auto *row = new QWidget();
+	auto *icon = new QLabel(row);
+	icon->setObjectName(kIconLabelName);
+	icon->setAttribute(Qt::WA_TransparentForMouseEvents);
+	auto *name = new QLabel(row);
+	name->setObjectName(kNameLabelName);
+	name->setTextFormat(Qt::PlainText);
+	name->setAttribute(Qt::WA_TransparentForMouseEvents);
+	name->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+
+	auto *visible = new QToolButton(row);
+	visible->setObjectName(kVisibleButtonName);
+	visible->setCheckable(true);
+	visible->setAutoRaise(true);
+	visible->setIconSize(QSize(kRowIconSize, kRowIconSize));
+	auto *lock = new QToolButton(row);
+	lock->setObjectName(kLockButtonName);
+	lock->setCheckable(true);
+	lock->setAutoRaise(true);
+	lock->setIconSize(QSize(kRowIconSize, kRowIconSize));
+
+	const std::int64_t id = view.id;
+	connect(visible, &QToolButton::toggled, this, [this, id](bool on) { emit item_visibility_requested(id, on); });
+	connect(lock, &QToolButton::toggled, this, [this, id](bool on) { emit item_lock_requested(id, on); });
+
+	auto *layout = new QHBoxLayout(row);
+	layout->setContentsMargins(4, 0, 2, 0);
+	layout->setSpacing(4);
+	layout->addWidget(icon);
+	layout->addWidget(name, 1);
+	layout->addWidget(visible);
+	layout->addWidget(lock);
+
+	update_row(row, view);
+	return row;
+}
+
+void VerticalDock::update_row(QWidget *row, const VerticalItemView &view)
+{
+	row->findChild<QLabel *>(kIconLabelName)
+		->setPixmap(themed_pixmap(view.icon_file.c_str(), palette(), kRowIconSize, devicePixelRatioF()));
+	auto *name = row->findChild<QLabel *>(kNameLabelName);
+	name->setText(view.name);
+	name->setToolTip(view.name);
+	name->setEnabled(view.visible);
+	set_toggle_look(row->findChild<QToolButton *>(kVisibleButtonName), view.visible, kVisibleIcon, kHiddenIcon,
+			"Vertical.HideSource", "Vertical.ShowSource");
+	set_toggle_look(row->findChild<QToolButton *>(kLockButtonName), view.locked, kLockedIcon, kUnlockedIcon,
+			"Vertical.UnlockSource", "Vertical.LockSource");
+}
+
+void VerticalDock::apply_icons()
+{
+	for (const IconButton &entry : icon_buttons_) {
+		entry.button->setIcon(themed_icon(entry.icon_file, palette()));
+	}
+	for (int row = 0; row < items_->count() && row < static_cast<int>(shown_items_.size()); ++row) {
+		update_row(items_->itemWidget(items_->item(row)), shown_items_[static_cast<std::size_t>(row)]);
+	}
+}
+
+void VerticalDock::changeEvent(QEvent *event)
+{
+	QWidget::changeEvent(event);
+	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange) {
+		apply_icons();
+	}
+}
+
+void VerticalDock::resizeEvent(QResizeEvent *event)
+{
+	QWidget::resizeEvent(event);
+	const Qt::Orientation wanted = event->size().width() < kStackBelowWidth ? Qt::Vertical : Qt::Horizontal;
+	if (lists_->orientation() != wanted) {
+		lists_->setOrientation(wanted);
+	}
 }
 
 void VerticalDock::set_available(bool available)
 {
 	controls_->setEnabled(available);
 	if (available) {
-		message_->hide();
+		if (message_->text() == text("Vertical.Unavailable")) {
+			message_->hide();
+		}
 	} else {
 		show_message(text("Vertical.Unavailable"));
 	}
@@ -150,32 +299,54 @@ void VerticalDock::set_available(bool available)
 
 void VerticalDock::set_scenes(const std::vector<QString> &scenes, const QString &active)
 {
+	// A refresh must not throw away a name being typed.
+	if (static_cast<SceneList *>(scenes_)->editing()) {
+		return;
+	}
+
 	updating_ = true;
 	scenes_->clear();
 	for (const QString &scene : scenes) {
-		scenes_->addItem(scene);
+		auto *item = new QListWidgetItem(scene, scenes_);
+		item->setFlags(item->flags() | Qt::ItemIsEditable);
+		item->setData(kSceneNameRole, scene);
+		if (scene == active) {
+			scenes_->setCurrentItem(item);
+		}
 	}
-	scenes_->setCurrentText(active);
 	updating_ = false;
 }
 
 void VerticalDock::set_items(const std::vector<VerticalItemView> &items)
 {
 	const auto selected = selected_item();
+	const bool same_rows = std::equal(items.begin(), items.end(), shown_items_.begin(), shown_items_.end(),
+					  [](const VerticalItemView &left, const VerticalItemView &right) {
+						  return left.id == right.id;
+					  });
 
 	updating_ = true;
-	items_->clear();
-	for (const VerticalItemView &view : items) {
-		auto *item = new QListWidgetItem(view.name, items_);
-		item->setData(kItemIdRole, static_cast<qlonglong>(view.id));
-		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-		item->setCheckState(view.visible ? Qt::Checked : Qt::Unchecked);
-		if (selected == view.id) {
-			item->setSelected(true);
-			items_->setCurrentItem(item);
+	shown_items_ = items;
+	if (same_rows) {
+		// In place: a toggle can land here from a click on one of the row's own buttons.
+		for (int row = 0; row < items_->count(); ++row) {
+			update_row(items_->itemWidget(items_->item(row)), items[static_cast<std::size_t>(row)]);
+		}
+	} else {
+		items_->clear();
+		for (const VerticalItemView &view : items) {
+			auto *item = new QListWidgetItem(items_);
+			item->setData(kItemIdRole, static_cast<qlonglong>(view.id));
+			QWidget *row = item_row(view);
+			item->setSizeHint(row->sizeHint());
+			items_->setItemWidget(item, row);
+			if (selected == view.id) {
+				items_->setCurrentItem(item);
+			}
 		}
 	}
 	updating_ = false;
+	empty_hint_->setVisible(items.empty());
 }
 
 void VerticalDock::select_item(std::optional<std::int64_t> id)
@@ -191,20 +362,19 @@ void VerticalDock::select_item(std::optional<std::int64_t> id)
 	updating_ = false;
 }
 
-void VerticalDock::set_main_sources(const std::vector<QString> &sources)
-{
-	const QString current = main_sources_->currentText();
-	main_sources_->clear();
-	for (const QString &source : sources) {
-		main_sources_->addItem(source);
-	}
-	main_sources_->setCurrentText(current);
-}
-
 void VerticalDock::set_resolution(int width, int height)
 {
-	width_->setValue(width);
-	height_->setValue(height);
+	resolution_->setText(QString("%1 x %2").arg(width).arg(height));
+}
+
+void VerticalDock::set_hidden_audio_items(int count)
+{
+	if (count > 0) {
+		audio_note_->setText(QString("%1 <a href=\"remove\">%2</a>")
+					     .arg(text("Vertical.AudioNote").toHtmlEscaped(),
+						  text("Vertical.AudioNoteRemove").toHtmlEscaped()));
+	}
+	audio_note_->setVisible(count > 0);
 }
 
 void VerticalDock::show_message(const QString &message)
@@ -220,6 +390,12 @@ std::optional<std::int64_t> VerticalDock::selected_item() const
 		return std::nullopt;
 	}
 	return item->data(kItemIdRole).toLongLong();
+}
+
+QString VerticalDock::selected_scene() const
+{
+	const QListWidgetItem *item = scenes_->currentItem();
+	return item != nullptr ? item->data(kSceneNameRole).toString() : QString();
 }
 
 } // namespace multistream

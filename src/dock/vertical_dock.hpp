@@ -7,13 +7,13 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
-class QComboBox;
 class QLabel;
 class QListWidget;
-class QPushButton;
-class QSpinBox;
+class QSplitter;
+class QToolButton;
 
 namespace multistream {
 
@@ -22,7 +22,10 @@ class VerticalPreview;
 struct VerticalItemView {
 	std::int64_t id = 0;
 	QString name;
+	// Relative to the plugin's data directory.
+	std::string icon_file;
 	bool visible = true;
+	bool locked = false;
 };
 
 class VerticalDock final : public QWidget {
@@ -37,36 +40,56 @@ public:
 	void set_scenes(const std::vector<QString> &scenes, const QString &active);
 	void set_items(const std::vector<VerticalItemView> &items);
 	void select_item(std::optional<std::int64_t> id);
-	void set_main_sources(const std::vector<QString> &sources);
 	void set_resolution(int width, int height);
+	void set_hidden_audio_items(int count);
 	void show_message(const QString &message);
 
 signals:
 	void scene_selected(const QString &name);
 	void add_scene_requested();
-	void rename_scene_requested(const QString &name);
+	void rename_scene_requested(const QString &name, const QString &new_name);
 	void remove_scene_requested(const QString &name);
-	void add_source_requested(const QString &name);
+	void move_scene_requested(const QString &name, bool up);
+	void add_source_menu_requested(const QPoint &global_position);
 	void remove_item_requested(std::int64_t id);
 	void move_item_up_requested(std::int64_t id);
 	void move_item_down_requested(std::int64_t id);
 	void item_selected(std::int64_t id);
 	void item_visibility_requested(std::int64_t id, bool visible);
-	void fit_item_requested(std::int64_t id);
-	void fill_item_requested(std::int64_t id);
-	void resolution_requested(int width, int height);
+	void item_lock_requested(std::int64_t id, bool locked);
+	void item_properties_requested(std::int64_t id);
+	void remove_hidden_audio_requested();
+	void resolution_settings_requested();
+
+protected:
+	void changeEvent(QEvent *event) override;
+	void resizeEvent(QResizeEvent *event) override;
 
 private:
+	struct IconButton {
+		QToolButton *button;
+		const char *icon_file;
+	};
+
+	QToolButton *icon_button(const char *icon_file, const char *tooltip_key);
+	QWidget *list_panel(const char *title_key, QListWidget *list, const std::vector<QToolButton *> &tools);
+	QWidget *item_row(const VerticalItemView &view);
+	void update_row(QWidget *row, const VerticalItemView &view);
+	void apply_icons();
 	std::optional<std::int64_t> selected_item() const;
+	QString selected_scene() const;
 
 	VerticalPreview *preview_;
 	QWidget *controls_;
 	QLabel *message_;
-	QComboBox *scenes_;
+	QLabel *empty_hint_;
+	QLabel *resolution_;
+	QLabel *audio_note_;
+	QSplitter *lists_;
+	QListWidget *scenes_;
 	QListWidget *items_;
-	QComboBox *main_sources_;
-	QSpinBox *width_;
-	QSpinBox *height_;
+	std::vector<IconButton> icon_buttons_;
+	std::vector<VerticalItemView> shown_items_;
 	bool updating_ = false;
 };
 
