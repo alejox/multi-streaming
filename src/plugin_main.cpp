@@ -30,6 +30,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#if defined(MULTI_STREAM_E2E_SECRETS)
+#include "e2e/e2e_commands.hpp"
+#include "secrets/e2e_file_secret_store.hpp"
+#endif
+
 #include <QMetaObject>
 #include <QObject>
 #include <QtCore/qglobal.h>
@@ -44,12 +49,25 @@ namespace {
 
 constexpr const char *kDockId = "obs-multi-stream-destinations";
 
+std::unique_ptr<multistream::SecretStore> make_secret_store()
+{
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	char *path = obs_module_config_path("e2e-secrets.txt");
+	const std::string file = path != nullptr ? path : "";
+	bfree(path);
+	obs_log(LOG_WARNING, "%s: stream keys come from a test file", multistream::E2eFileSecretStore::marker());
+	return std::make_unique<multistream::E2eFileSecretStore>(file);
+#else
+	return multistream::make_platform_secret_store();
+#endif
+}
+
 // Members are destroyed in reverse order: the controller stops listening, the
 // Dispatcher's target drops queued work, and only then the engine goes.
 struct Composition {
 	explicit Composition(const std::string &config_path)
 		: repository(config_path),
-		  secrets(multistream::make_platform_secret_store()),
+		  secrets(make_secret_store()),
 		  engine(*secrets, video_sources, [this](std::function<void()> work) {
 			  QMetaObject::invokeMethod(&dispatch_target, std::move(work), Qt::QueuedConnection);
 		  })
@@ -62,6 +80,9 @@ struct Composition {
 	multistream::StreamingEngine engine;
 	QObject dispatch_target;
 	std::unique_ptr<multistream::DockController> controller;
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	std::unique_ptr<multistream::E2eCommands> e2e_commands;
+#endif
 };
 
 std::unique_ptr<Composition> composition;
@@ -149,6 +170,12 @@ void activate_features()
 			std::move(load.config), composition->repository, *composition->secrets, composition->engine,
 			dock);
 	}
+
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	char *commands_path = obs_module_config_path("e2e-commands.txt");
+	composition->e2e_commands = std::make_unique<multistream::E2eCommands>(commands_path, composition->engine);
+	bfree(commands_path);
+#endif
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 }

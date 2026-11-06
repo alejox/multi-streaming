@@ -6,6 +6,7 @@ project(${_name} VERSION ${_version})
 
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" ON)
 option(ENABLE_QT "Use Qt functionality" ON)
+option(MULTI_STREAM_E2E_SECRETS "Read fake stream keys from a file, for runtime tests. Never install such a build." OFF)
 
 if(NOT ENABLE_FRONTEND_API OR NOT ENABLE_QT)
   message(FATAL_ERROR "obs-multi-stream requires ENABLE_FRONTEND_API and ENABLE_QT.")
@@ -44,4 +45,21 @@ target_sources(
     src/streaming/streaming_engine.cpp
 )
 
+if(MULTI_STREAM_E2E_SECRETS)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/e2e/e2e_commands.cpp src/secrets/e2e_file_secret_store.cpp)
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE MULTI_STREAM_E2E_SECRETS)
+  # Runs first among the install scripts, so nothing reaches the install prefix.
+  install(CODE "message(FATAL_ERROR \"A MULTI_STREAM_E2E_SECRETS build must never be installed.\")")
+endif()
+
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
+if(NOT MULTI_STREAM_E2E_SECRETS)
+  add_custom_command(
+    TARGET ${CMAKE_PROJECT_NAME}
+    POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" "-DBINARY=$<TARGET_FILE:${CMAKE_PROJECT_NAME}>" -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_no_e2e_marker.cmake"
+    COMMENT "Checking that the binary does not contain the end-to-end secret store"
+  )
+endif()
