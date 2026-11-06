@@ -74,7 +74,7 @@ Isolated-instance technique, which leaves the user's running OBS alone:
 - [x] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Commit `7c0e412`; runtime defect D1 fixed in the commit recorded under D1.
 - [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: runs inside OBS and the engine behind it is proven, but the dock has no UI proof. Commit `6d1461f`.
 - [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated (2+ non-trivial files). Status: runtime proof partial, UI pending. Commit: the one recording this line.
-- [ ] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: delegated.
+- [x] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: E2E delegated (commit `440b334` evidence); README inline (one passive file). Parent spot check: core tests 22 of 22 pass; default binary has no `e2e` string. Assessed tier: medium, RDD off.
 
 ## Acceptance criteria
 
@@ -208,4 +208,4 @@ Removal residue, for T7 (observed with the plugin deleted from the isolated inst
 
 ## Next step
 
-A human UI check for T5 and T6, then T7.
+A human UI check for T5 and T6, after deciding whether to install this build in the real OBS, because first load adds the canvas to the real scene collection. Engram mirror pending: auto mode could not review `mem_save` because a hook changes its input.
