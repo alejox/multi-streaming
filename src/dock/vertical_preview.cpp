@@ -11,6 +11,10 @@
 #include <QShowEvent>
 #include <QWindow>
 
+#if defined(__linux__)
+#include <obs-nix-platform.h>
+#endif
+
 namespace multistream {
 namespace {
 
@@ -178,6 +182,26 @@ void VerticalPreview::create_display()
 	init.window.view = reinterpret_cast<id>(native);
 #elif defined(_WIN32)
 	init.window.hwnd = reinterpret_cast<void *>(native);
+#elif defined(__linux__)
+	// Same as OBSQTDisplay in OBS Studio. It waits for exposure because a Wayland surface
+	// is not usable before that; the paint event that follows exposure retries.
+	if (windowHandle() == nullptr || !windowHandle()->isExposed()) {
+		return;
+	}
+	switch (obs_get_nix_platform()) {
+	case OBS_NIX_PLATFORM_X11_EGL:
+		init.window.id = static_cast<uint32_t>(native);
+		init.window.display = obs_get_nix_platform_display();
+		break;
+	case OBS_NIX_PLATFORM_WAYLAND:
+		init.window.display = reinterpret_cast<void *>(native);
+		if (init.window.display == nullptr) {
+			return;
+		}
+		break;
+	default:
+		return;
+	}
 #else
 	static_cast<void>(native);
 	return;
