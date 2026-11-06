@@ -41,8 +41,7 @@ json encode_destination(const Destination &destination)
 		{"sync_with_main", destination.sync_with_main},
 		{"reconnect",
 		 {{"max_retries", destination.reconnect.max_retries()},
-		  {"base_delay_seconds", destination.reconnect.base_delay_seconds()},
-		  {"max_delay_seconds", destination.reconnect.max_delay_seconds()}}},
+		  {"base_delay_seconds", destination.reconnect.base_delay_seconds()}}},
 	};
 }
 
@@ -128,6 +127,8 @@ EncoderPreference decode_encoder(const json &entry)
 	return encoder;
 }
 
+// A "max_delay_seconds" field from an older config is ignored like any unknown field,
+// and disappears on the next save: libobs cannot enforce it.
 ReconnectPolicy decode_reconnect(const json &entry)
 {
 	const ReconnectPolicy defaults;
@@ -138,8 +139,7 @@ ReconnectPolicy decode_reconnect(const json &entry)
 
 	const auto policy =
 		ReconnectPolicy::create(optional_int(*object, "max_retries", defaults.max_retries()),
-					optional_int(*object, "base_delay_seconds", defaults.base_delay_seconds()),
-					optional_int(*object, "max_delay_seconds", defaults.max_delay_seconds()));
+					optional_int(*object, "base_delay_seconds", defaults.base_delay_seconds()));
 	if (!policy) {
 		throw EntryError{"\"reconnect\" values are out of range"};
 	}

@@ -33,6 +33,12 @@ target_compile_options(
 )
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON AUTOUIC ON AUTORCC ON)
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin_main.cpp)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE
+    src/plugin_main.cpp
+    src/streaming/main_stream_encoders.cpp
+    src/streaming/streaming_engine.cpp
+)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

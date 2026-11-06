@@ -16,9 +16,12 @@ add_library(
   destinations/destination.cpp
   destinations/destination_removal.cpp
   destinations/encoder_groups.cpp
+  destinations/encoder_leases.cpp
+  destinations/encoder_plan.cpp
   destinations/reconnect_policy.cpp
   destinations/runtime_requirements.cpp
   destinations/session.cpp
+  destinations/session_selection.cpp
   destinations/stream_stats.cpp
   destinations/validation.cpp
 )

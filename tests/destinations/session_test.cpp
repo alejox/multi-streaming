@@ -134,3 +134,37 @@ TEST_CASE(names_every_state)
 	CHECK_EQ(std::string(to_string(SessionState::Stopping)), "stopping");
 	CHECK_EQ(std::string(to_string(SessionState::Failed)), "failed");
 }
+
+TEST_CASE(a_clean_output_stop_ends_the_session)
+{
+	Session session = live_session();
+	CHECK(apply_output_stop(session, true, ""));
+	CHECK(session.state() == SessionState::Idle);
+}
+
+TEST_CASE(an_unclean_output_stop_fails_with_its_reason)
+{
+	Session session = live_session();
+	CHECK(apply_output_stop(session, false, "Connection reset"));
+	CHECK(session.state() == SessionState::Failed);
+	CHECK_EQ(session.failure_reason(), "Connection reset");
+}
+
+TEST_CASE(a_connection_failure_after_a_requested_stop_is_still_reported)
+{
+	Session session;
+	REQUIRE(session.request_start());
+	REQUIRE(session.request_stop());
+	CHECK(apply_output_stop(session, false, "Could not connect"));
+	CHECK(session.state() == SessionState::Failed);
+}
+
+TEST_CASE(is_running_covers_the_states_a_stop_applies_to)
+{
+	CHECK(is_running(SessionState::Starting));
+	CHECK(is_running(SessionState::Live));
+	CHECK(is_running(SessionState::Reconnecting));
+	CHECK(!is_running(SessionState::Idle));
+	CHECK(!is_running(SessionState::Stopping));
+	CHECK(!is_running(SessionState::Failed));
+}

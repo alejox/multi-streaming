@@ -21,7 +21,7 @@ Destination full_destination()
 	destination.encoder.video_encoder_id = "com.apple.videotoolbox.videoencoder.ave.avc";
 	destination.audio_track = 3;
 	destination.sync_with_main = true;
-	destination.reconnect = *ReconnectPolicy::create(5, 3, 60);
+	destination.reconnect = *ReconnectPolicy::create(5, 3);
 	return destination;
 }
 
@@ -126,7 +126,7 @@ TEST_CASE(reports_invalid_entries)
 	CHECK(entry_error(R"({"id": "a", "name": "n", "server_url": "u", "encoder": {"mode": "magic"}})") ==
 	      ConfigErrorKind::InvalidEntry);
 	CHECK(entry_error(R"({"id": "a", "name": "n", "server_url": "u",
-		"reconnect": {"max_retries": -1, "base_delay_seconds": 2, "max_delay_seconds": 900}})") ==
+		"reconnect": {"max_retries": -1, "base_delay_seconds": 2}})") ==
 	      ConfigErrorKind::InvalidEntry);
 }
 
@@ -143,4 +143,21 @@ TEST_CASE(keeps_semantically_invalid_values_for_later_validation)
 		R"({"schema_version": 1, "destinations": [{"id": "a", "name": "n", "server_url": "not a url"}]})");
 	REQUIRE(std::holds_alternative<DestinationsConfig>(decoded));
 	CHECK_EQ(std::get<DestinationsConfig>(decoded).destinations.at(0).server_url, "not a url");
+}
+
+TEST_CASE(does_not_store_a_reconnect_delay_cap_libobs_cannot_enforce)
+{
+	DestinationsConfig config;
+	config.destinations.push_back(full_destination());
+	CHECK(encode_config(config).find("max_delay_seconds") == std::string::npos);
+}
+
+TEST_CASE(older_configs_with_a_reconnect_delay_cap_still_load)
+{
+	const auto decoded = decode_config(R"({"schema_version": 1, "destinations": [{"id": "a", "name": "n",
+		"server_url": "u", "reconnect": {"max_retries": 7, "base_delay_seconds": 4, "max_delay_seconds": 2}}]})");
+	REQUIRE(std::holds_alternative<DestinationsConfig>(decoded));
+	const ReconnectPolicy &policy = std::get<DestinationsConfig>(decoded).destinations.at(0).reconnect;
+	CHECK_EQ(policy.max_retries(), 7);
+	CHECK_EQ(policy.base_delay_seconds(), 4);
 }

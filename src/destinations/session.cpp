@@ -21,6 +21,11 @@ const char *to_string(SessionState state)
 	return "unknown";
 }
 
+bool is_running(SessionState state)
+{
+	return state == SessionState::Starting || state == SessionState::Live || state == SessionState::Reconnecting;
+}
+
 bool Session::request_start()
 {
 	if (state_ != SessionState::Idle && state_ != SessionState::Failed) {
@@ -84,6 +89,11 @@ bool Session::fail(std::string reason)
 	state_ = SessionState::Failed;
 	failure_reason_ = reason.empty() ? "Unknown failure" : std::move(reason);
 	return true;
+}
+
+bool apply_output_stop(Session &session, bool clean, std::string reason)
+{
+	return clean ? session.output_stopped() : session.fail(std::move(reason));
 }
 
 } // namespace multistream
