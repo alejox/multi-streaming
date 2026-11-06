@@ -22,6 +22,7 @@ Destination full_destination()
 	destination.audio_track = 3;
 	destination.sync_with_main = true;
 	destination.reconnect = *ReconnectPolicy::create(5, 3);
+	destination.platform = Platform::TikTok;
 	return destination;
 }
 
@@ -52,7 +53,7 @@ TEST_CASE(round_trips_every_field)
 TEST_CASE(encodes_the_schema_version)
 {
 	const std::string encoded = encode_config(DestinationsConfig{});
-	CHECK(encoded.find("\"schema_version\": 1") != std::string::npos);
+	CHECK(encoded.find("\"schema_version\": 2") != std::string::npos);
 }
 
 TEST_CASE(never_carries_a_key_found_in_the_input)
@@ -106,7 +107,7 @@ TEST_CASE(reports_malformed_documents)
 
 TEST_CASE(reports_a_newer_schema_as_unsupported)
 {
-	CHECK(error_kind_of(R"({"schema_version": 2, "destinations": []})") == ConfigErrorKind::UnsupportedSchema);
+	CHECK(error_kind_of(R"({"schema_version": 3, "destinations": []})") == ConfigErrorKind::UnsupportedSchema);
 }
 
 TEST_CASE(reports_invalid_entries)
@@ -160,4 +161,69 @@ TEST_CASE(older_configs_with_a_reconnect_delay_cap_still_load)
 	const ReconnectPolicy &policy = std::get<DestinationsConfig>(decoded).destinations.at(0).reconnect;
 	CHECK_EQ(policy.max_retries(), 7);
 	CHECK_EQ(policy.base_delay_seconds(), 4);
+}
+
+TEST_CASE(a_version_1_config_loads_without_a_platform)
+{
+	const auto decoded = multistream::decode_config(
+		R"({"schema_version":1,"destinations":[{"id":"a","name":"n","server_url":"rtmp://example.com/app"}]})");
+	const auto *config = std::get_if<multistream::DestinationsConfig>(&decoded);
+	REQUIRE(config != nullptr);
+	REQUIRE(config->destinations.size() == 1);
+	CHECK(!config->destinations[0].platform);
+}
+
+TEST_CASE(a_version_1_config_saves_as_the_current_version)
+{
+	const auto decoded = multistream::decode_config(R"({"schema_version":1,"destinations":[]})");
+	const auto *config = std::get_if<multistream::DestinationsConfig>(&decoded);
+	REQUIRE(config != nullptr);
+	CHECK(multistream::encode_config(*config).find("\"schema_version\": 2") != std::string::npos);
+}
+
+TEST_CASE(a_platform_round_trips)
+{
+	multistream::Destination destination;
+	destination.id = "a";
+	destination.name = "n";
+	destination.server_url = "rtmps://fa723fc1b171.global-contribute.live-video.net/app";
+	destination.platform = multistream::Platform::Kick;
+	multistream::DestinationsConfig config;
+	config.destinations.push_back(destination);
+
+	const std::string encoded = multistream::encode_config(config);
+	CHECK(encoded.find("\"platform\": \"kick\"") != std::string::npos);
+	const auto decoded = multistream::decode_config(encoded);
+	const auto *result = std::get_if<multistream::DestinationsConfig>(&decoded);
+	REQUIRE(result != nullptr);
+	CHECK(*result == config);
+}
+
+TEST_CASE(no_platform_is_not_written)
+{
+	multistream::Destination destination;
+	destination.id = "a";
+	destination.name = "n";
+	destination.server_url = "rtmp://example.com/app";
+	multistream::DestinationsConfig config;
+	config.destinations.push_back(destination);
+	CHECK(multistream::encode_config(config).find("platform") == std::string::npos);
+}
+
+TEST_CASE(an_unknown_platform_is_ignored_rather_than_corrupt)
+{
+	const auto decoded = multistream::decode_config(
+		R"({"schema_version":2,"destinations":[{"id":"a","name":"n","server_url":"rtmp://e.com/a","platform":"myspace"}]})");
+	const auto *config = std::get_if<multistream::DestinationsConfig>(&decoded);
+	REQUIRE(config != nullptr);
+	CHECK(!config->destinations[0].platform);
+}
+
+TEST_CASE(a_platform_of_the_wrong_type_is_an_invalid_entry)
+{
+	const auto decoded = multistream::decode_config(
+		R"({"schema_version":2,"destinations":[{"id":"a","name":"n","server_url":"rtmp://e.com/a","platform":3}]})");
+	const auto *error = std::get_if<multistream::ConfigError>(&decoded);
+	REQUIRE(error != nullptr);
+	CHECK(error->kind == multistream::ConfigErrorKind::InvalidEntry);
 }

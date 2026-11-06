@@ -21,6 +21,7 @@ add_library(
   destinations/encoder_groups.cpp
   destinations/encoder_leases.cpp
   destinations/encoder_plan.cpp
+  destinations/platform.cpp
   destinations/reconnect_policy.cpp
   destinations/runtime_requirements.cpp
   destinations/session.cpp
@@ -30,6 +31,7 @@ add_library(
   destinations/validation.cpp
   destinations/vertical_settings.cpp
   vertical_canvas/preview_geometry.cpp
+  vertical_canvas/source_icons.cpp
 )
 target_include_directories(multistream_core PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 target_include_directories(multistream_core SYSTEM PRIVATE "${nlohmann_json_header_SOURCE_DIR}")

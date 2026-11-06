@@ -10,7 +10,7 @@
 
 namespace multistream {
 
-inline constexpr int kConfigSchemaVersion = 1;
+inline constexpr int kConfigSchemaVersion = 2;
 
 enum class ConfigErrorKind { Malformed, UnsupportedSchema, InvalidEntry };
 

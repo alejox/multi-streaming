@@ -1,6 +1,7 @@
 #include "dock/destination_editor_dialog.hpp"
 
 #include "destinations/destination_editing.hpp"
+#include "dock/icons.hpp"
 
 #include <obs-module.h>
 
@@ -12,6 +13,8 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QVBoxLayout>
+
+#include <string>
 
 namespace multistream {
 namespace {
@@ -27,6 +30,16 @@ QSpinBox *new_spin_box(int minimum, int maximum, int value, QWidget *parent)
 	spin_box->setRange(minimum, maximum);
 	spin_box->setValue(value);
 	return spin_box;
+}
+
+std::string platform_icon_file(Platform platform)
+{
+	return std::string("icons/platforms/") + platform_id(platform) + ".svg";
+}
+
+std::string platform_text_key(const char *prefix, Platform platform)
+{
+	return std::string(prefix) + platform_id(platform);
 }
 
 } // namespace
@@ -46,9 +59,26 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	name_ = new QLineEdit(QString::fromStdString(initial.name), this);
 	field_errors_[DestinationField::Name] = add_field(form, "Editor.Name", name_);
 
+	service_ = new QComboBox(this);
+	for (const Platform platform : kAllPlatforms) {
+		service_->addItem(themed_icon(platform_icon_file(platform).c_str(), palette()),
+				  obs_module_text(platform_text_key("Platform.", platform).c_str()),
+				  static_cast<int>(platform));
+	}
+	service_->setCurrentIndex(
+		service_->findData(static_cast<int>(effective_platform(initial.platform, initial.server_url))));
+	add_field(form, "Editor.Service", service_);
+
 	server_url_ = new QLineEdit(QString::fromStdString(initial.server_url), this);
 	server_url_->setPlaceholderText(obs_module_text("Editor.ServerUrlHint"));
 	field_errors_[DestinationField::ServerUrl] = add_field(form, "Editor.ServerUrl", server_url_);
+
+	service_hint_ = new QLabel(this);
+	service_hint_->setWordWrap(true);
+	service_hint_->setTextFormat(Qt::PlainText);
+	form->addRow(QString(), service_hint_);
+	update_service_hint();
+	connect(service_, &QComboBox::activated, this, &DestinationEditorDialog::service_picked);
 
 	key_ = new QLineEdit(this);
 	key_->setEchoMode(QLineEdit::Password);
@@ -183,6 +213,10 @@ Destination DestinationEditorDialog::read_destination() const
 	Destination destination = initial_;
 	destination.name = name_->text().trimmed().toStdString();
 	destination.server_url = server_url_->text().trimmed().toStdString();
+	// Stays unset until someone picks a service, so the URL keeps deciding.
+	if (service_picked_) {
+		destination.platform = static_cast<Platform>(service_->currentData().toInt());
+	}
 	destination.enabled = enabled_->isChecked();
 	destination.video_source = static_cast<VideoSource>(video_source_->currentData().toInt());
 	destination.encoder.mode = static_cast<EncoderMode>(encoder_mode_->currentData().toInt());
@@ -211,6 +245,23 @@ void DestinationEditorDialog::show_error(QLabel *label, const QString &message)
 {
 	label->setText(message);
 	label->show();
+}
+
+void DestinationEditorDialog::service_picked()
+{
+	service_picked_ = true;
+	const auto platform = static_cast<Platform>(service_->currentData().toInt());
+	server_url_->setText(
+		QString::fromStdString(url_after_picking(platform, server_url_->text().trimmed().toStdString())));
+	update_service_hint();
+}
+
+void DestinationEditorDialog::update_service_hint()
+{
+	const auto platform = static_cast<Platform>(service_->currentData().toInt());
+	const QString hint = obs_module_text(platform_text_key("Editor.ServiceHint.", platform).c_str());
+	service_hint_->setText(hint);
+	service_hint_->setVisible(!hint.isEmpty() && !preset_ingest_url(platform) && platform != Platform::Custom);
 }
 
 void DestinationEditorDialog::update_custom_fields()

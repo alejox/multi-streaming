@@ -46,12 +46,17 @@ private:
 	void clear_errors();
 	void show_error(QLabel *label, const QString &message);
 	void update_custom_fields();
+	void service_picked();
+	void update_service_hint();
 
 	Destination initial_;
 	bool is_new_;
 	SaveHandler save_;
 
 	QLineEdit *name_ = nullptr;
+	QComboBox *service_ = nullptr;
+	QLabel *service_hint_ = nullptr;
+	bool service_picked_ = false;
 	QLineEdit *server_url_ = nullptr;
 	QLineEdit *key_ = nullptr;
 	QCheckBox *show_key_ = nullptr;

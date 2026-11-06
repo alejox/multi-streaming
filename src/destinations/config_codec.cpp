@@ -27,7 +27,7 @@ const char *to_json_name(EncoderMode mode)
 
 json encode_destination(const Destination &destination)
 {
-	return {
+	json encoded = {
 		{"id", destination.id},
 		{"name", destination.name},
 		{"server_url", destination.server_url},
@@ -43,6 +43,10 @@ json encode_destination(const Destination &destination)
 		 {{"max_retries", destination.reconnect.max_retries()},
 		  {"base_delay_seconds", destination.reconnect.base_delay_seconds()}}},
 	};
+	if (destination.platform) {
+		encoded["platform"] = platform_id(*destination.platform);
+	}
+	return encoded;
 }
 
 std::string required_string(const json &object, const char *field)
@@ -162,6 +166,9 @@ Destination decode_destination(const json &entry)
 	destination.audio_track = optional_int(entry, "audio_track", destination.audio_track);
 	destination.sync_with_main = optional_bool(entry, "sync_with_main", destination.sync_with_main);
 	destination.reconnect = decode_reconnect(entry);
+	// Added in schema 2, so older files have none. A name this build does not know, from
+	// a later one, only costs an icon: it should not get the whole file moved aside.
+	destination.platform = platform_from_id(optional_string(entry, "platform", ""));
 	return destination;
 }
 

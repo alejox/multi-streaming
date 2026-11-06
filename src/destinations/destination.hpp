@@ -2,8 +2,10 @@
 // only behind SecretStore, so it cannot reach the config file through this type.
 #pragma once
 
+#include "destinations/platform.hpp"
 #include "destinations/reconnect_policy.hpp"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,13 +39,15 @@ struct Destination {
 	int audio_track = 1;
 	bool sync_with_main = false;
 	ReconnectPolicy reconnect;
+	// Nothing means nobody picked one: the URL decides.
+	std::optional<Platform> platform;
 
 	bool operator==(const Destination &other) const
 	{
 		return id == other.id && name == other.name && server_url == other.server_url &&
 		       enabled == other.enabled && video_source == other.video_source && encoder == other.encoder &&
 		       audio_track == other.audio_track && sync_with_main == other.sync_with_main &&
-		       reconnect == other.reconnect;
+		       reconnect == other.reconnect && platform == other.platform;
 	}
 };
 
