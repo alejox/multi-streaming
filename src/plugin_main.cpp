@@ -37,6 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "secrets/e2e_file_secret_store.hpp"
 #endif
 
+#include <QDockWidget>
 #include <QMetaObject>
 #include <QObject>
 #include <QtCore/qglobal.h>
@@ -58,6 +59,16 @@ std::string module_config_path(const char *file)
 	const std::string result = path != nullptr ? path : "";
 	bfree(path);
 	return result;
+}
+
+// macOS minimizes a floating window on a double-click of its title bar. An OBS dock has no
+// place in the macOS dock, so it just vanishes. Removing the minimize button also disables
+// that double-click action, while the dock stays resizable and floatable.
+void prevent_dock_minimize(QWidget *content)
+{
+	if (auto *dock_widget = qobject_cast<QDockWidget *>(content->parentWidget())) {
+		dock_widget->setWindowFlag(Qt::WindowMinimizeButtonHint, false);
+	}
 }
 
 std::unique_ptr<multistream::SecretStore> make_secret_store()
@@ -186,6 +197,7 @@ void activate_features()
 		dock = nullptr;
 		composition->engine.set_destinations(std::move(load.config.destinations));
 	} else {
+		prevent_dock_minimize(dock);
 		if (load.problem) {
 			dock->show_problem(QString::fromStdString(*load.problem));
 		}
@@ -199,6 +211,7 @@ void activate_features()
 		obs_log(LOG_ERROR, "could not add the vertical canvas dock");
 		delete vertical_dock;
 	} else {
+		prevent_dock_minimize(vertical_dock);
 		composition->vertical_controller = std::make_unique<multistream::VerticalController>(
 			composition->vertical, composition->engine, vertical_dock);
 	}
