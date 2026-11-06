@@ -44,6 +44,24 @@
         "ENABLE_FRONTEND_API": true,
         "ENABLE_QT": true
       }
+    },
+    {
+      "name": "linux-x86_64",
+      "displayName": "Linux x86_64",
+      "description": "Build for 64-bit Linux against the system libobs, obs-frontend-api and Qt6 packages",
+      "binaryDir": "${sourceDir}/build_linux",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "generator": "Ninja",
+      "warnings": {"dev": true, "deprecated": true},
+      "cacheVariables": {
+        "ENABLE_FRONTEND_API": true,
+        "ENABLE_QT": true,
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
@@ -58,6 +76,11 @@
       "configurePreset": "windows-x64",
       "displayName": "Windows x64",
       "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "linux-x86_64",
+      "configurePreset": "linux-x86_64",
+      "displayName": "Linux x86_64"
     }
   ]
 }
