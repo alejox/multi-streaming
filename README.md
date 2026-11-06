@@ -2,7 +2,7 @@
 
 Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the system's secret store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), not in config files.
 
-> **Status: pre-release.** Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet. The Linux package is compiled and unit-tested in CI, the Windows package has not yet passed CI, and neither has been run inside OBS. See [Verification status](#verification-status).
+> **Status: v0.1.0 released.** Windows, Linux and macOS packages are published on the [releases page](https://github.com/alejox/multi-streaming/releases). Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet, and neither the Windows nor the Linux package has been run inside OBS. See [Verification status](#verification-status).
 
 ## Quick path
 
@@ -26,13 +26,15 @@ Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake.
 
 ## Packages
 
-The [Build workflow](.github/workflows/build.yml) produces one package per platform, downloadable from the artifacts of its run. Each package also holds these steps as `INSTALL.txt`.
+Download the latest packages from the [releases page](https://github.com/alejox/multi-streaming/releases). Each package also holds its install steps as `INSTALL.txt`.
 
 | Platform | Built against | Install, with OBS closed |
 |----------|---------------|--------------------------|
+| macOS arm64 | OBS 33.0.1 | Copy the `obs-multi-stream.plugin` bundle into `~/Library/Application Support/obs-studio/plugins/` |
 | Windows x64 | OBS 33.0.1 | Extract the `obs-multi-stream` folder into `C:\ProgramData\obs-studio\plugins\` |
 | Linux x86_64 | The OBS Project PPA for Ubuntu 24.04, 32.2.0 when this was written | `mkdir -p ~/.config/obs-studio/plugins`, then `tar -xzf <package> -C ~/.config/obs-studio/plugins` |
 
+- **The macOS package is ad-hoc signed and not notarized.** Gatekeeper may quarantine it after download. If macOS refuses to load it, clear the flag with `xattr -dr com.apple.quarantine obs-multi-stream.plugin`.
 - **Windows needs OBS 33 or later.** OBS refuses a plugin built against a newer libobs than its own.
 - **Linux needs glibc 2.39 and Qt 6.4 or later,** as on Ubuntu 24.04, plus libsecret. Without a running Secret Service such as GNOME Keyring or KWallet, stream keys cannot be saved.
 - **The Linux package is not built against OBS 33.0.1,** because the PPA has no OBS 33 for Ubuntu 24.04. See [Known limits](#known-limits).
@@ -66,7 +68,7 @@ The [Build workflow](.github/workflows/build.yml) produces one package per platf
 - Exit during a blocked Keychain read can report leaks.
 - Validation messages are English-only, and no UI translation exists beyond `en-US`.
 - The Canvas API is officially unstable in OBS 33.0.1. The build is pinned to that version, and other OBS versions are untested.
-- Only macOS arm64 has been run inside OBS. Linux x86_64 is compile-tested and unit-tested only, and Windows x64 has not yet passed CI.
+- Only macOS arm64 has been run inside OBS. Linux x86_64 and Windows x64 are compile-tested and unit-tested only.
 - The Linux package is built against OBS 32.2.0, an untested version for an unstable API. The functions the plugin calls from `obs.h` and `obs-frontend-api.h` have the same declarations in both versions, which says nothing about their behavior.
 - Where no secure store is available, saving a key fails loudly rather than falling back to plain text.
 
@@ -132,7 +134,7 @@ Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate buil
 
 | Check | Result |
 |-------|--------|
-| Core tests | 22 of 22 pass |
+| Core tests | 27 of 27 pass |
 | Plugin loads and unloads in OBS 33.0.1 | Pass |
 | Main and vertical streaming together | Pass: 640x360 and 1080x1920 on local sinks |
 | Retries exhausted, closed port, exit while live | Pass, repeated runs |
@@ -143,7 +145,8 @@ Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate buil
 | Real Keychain prompt during start | **Not tested** |
 | Real streaming services | **Not tested**; local sinks only |
 | Linux in CI: compile, core tests, Secret Service test, package | Pass, against OBS 32.2.0 |
-| Windows in CI: compile, core tests, package | **Not yet passed** |
+| Windows in CI: compile, core tests, package | Pass, against OBS 33.0.1 |
+| macOS package: build, core tests, ad-hoc code signature | Pass, locally |
 | Windows and Linux inside OBS, including previews on X11 and Wayland | **Not tested** |
 
 ## License
