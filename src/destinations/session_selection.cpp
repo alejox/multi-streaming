@@ -66,4 +66,18 @@ RowActions row_actions(SessionState state)
 	return actions;
 }
 
+std::vector<std::string> select_running_on(const std::vector<Destination> &destinations,
+					   const std::map<std::string, SessionState> &states, VideoSource source)
+{
+	std::vector<std::string> selected;
+	for (const Destination &destination : destinations) {
+		const auto state = states.find(destination.id);
+		if (destination.video_source == source && state != states.end() &&
+		    (is_running(state->second) || state->second == SessionState::Stopping)) {
+			selected.push_back(destination.id);
+		}
+	}
+	return selected;
+}
+
 } // namespace multistream

@@ -102,6 +102,7 @@ struct StreamingEngine::OutputLink {
 	// Written once before signals connect, and released by the retiring thread.
 	OBSOutput output;
 	OBSService service;
+	std::shared_ptr<void> video_hold;
 
 	bool clear() const
 	{
@@ -446,7 +447,27 @@ void StreamingEngine::stop_everything_now()
 	for (auto &[id, slot] : slots_) {
 		force_stop_and_release(*slot);
 	}
+	wait_for_retired_outputs();
+}
 
+void StreamingEngine::stop_source_now(VideoSource source)
+{
+	for (const std::string &id : select_running_on(destinations_, session_states(), source)) {
+		force_stop_and_release(*find_slot(id));
+	}
+	wait_for_retired_outputs();
+}
+
+bool StreamingEngine::video_in_use(VideoSource source)
+{
+	if (!select_running_on(destinations_, session_states(), source).empty()) {
+		return true;
+	}
+	return source == VideoSource::Vertical && retired_outputs_.drain(std::chrono::milliseconds(0)) > 0;
+}
+
+void StreamingEngine::wait_for_retired_outputs()
+{
 	const std::size_t remaining = retired_outputs_.drain(kTeardownWait);
 	if (remaining > 0) {
 		obs_log(LOG_WARNING, "%zu outputs are still shutting down", remaining);
@@ -595,6 +616,7 @@ std::optional<std::string> StreamingEngine::start_output(Slot &slot, const Encod
 	slot.link = std::make_shared<OutputLink>(std::move(owner), channel_, destination.reconnect.base_delay_seconds());
 	slot.link->output = output.Get();
 	slot.link->service = service.Get();
+	slot.link->video_hold = video_sources_.hold(destination.video_source);
 
 	obs_output_set_service(output, service);
 	obs_output_set_video_encoder(output, video_encoder);
@@ -720,6 +742,7 @@ void StreamingEngine::retire_output(Slot &slot, bool force_stop)
 				      link->disconnect_signals();
 				      link->output = nullptr;
 				      link->service = nullptr;
+				      link->video_hold = nullptr;
 			      },
 			      [link] {
 				      // Destroying it now could hang forever, so OBS is left to report the

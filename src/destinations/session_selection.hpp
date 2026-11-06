@@ -32,4 +32,8 @@ struct RowActions {
 
 RowActions row_actions(SessionState state);
 
+// Those on the given video source with an output still in use, including one stopping.
+std::vector<std::string> select_running_on(const std::vector<Destination> &destinations,
+					   const std::map<std::string, SessionState> &states, VideoSource source);
+
 } // namespace multistream

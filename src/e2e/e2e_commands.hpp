@@ -14,19 +14,24 @@
 namespace multistream {
 
 class StreamingEngine;
+class VerticalCanvas;
+class VerticalDock;
 
 class E2eCommands final : public QObject {
 	Q_OBJECT
 
 public:
-	E2eCommands(std::string path, StreamingEngine &engine);
+	E2eCommands(std::string path, StreamingEngine &engine, VerticalCanvas &canvas, VerticalDock *dock);
 
 private:
 	void poll();
 	void run(const std::string &command, const std::string &argument);
+	void dump_vertical();
 
 	std::string path_;
 	StreamingEngine &engine_;
+	VerticalCanvas &canvas_;
+	VerticalDock *dock_;
 	QTimer timer_;
 };
 

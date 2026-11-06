@@ -40,9 +40,13 @@ target_sources(
     src/dock/destination_editor_dialog.cpp
     src/dock/destinations_dock.cpp
     src/dock/dock_controller.cpp
+    src/dock/vertical_controller.cpp
+    src/dock/vertical_dock.cpp
+    src/dock/vertical_preview.cpp
     src/plugin_main.cpp
     src/streaming/main_stream_encoders.cpp
     src/streaming/streaming_engine.cpp
+    src/vertical_canvas/vertical_canvas.cpp
 )
 
 if(MULTI_STREAM_E2E_SECRETS)

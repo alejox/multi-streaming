@@ -28,6 +28,7 @@ add_library(
   destinations/start_tickets.cpp
   destinations/stream_stats.cpp
   destinations/validation.cpp
+  destinations/vertical_settings.cpp
 )
 target_include_directories(multistream_core PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 target_include_directories(multistream_core SYSTEM PRIVATE "${nlohmann_json_header_SOURCE_DIR}")
@@ -35,7 +36,13 @@ target_compile_features(multistream_core PUBLIC cxx_std_17)
 set_target_properties(multistream_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Adapters without OBS or Qt dependencies: config file and secret stores.
-add_library(multistream_adapters STATIC persistence/file_config_repository.cpp secrets/platform_secret_store.cpp)
+add_library(
+  multistream_adapters
+  STATIC
+  persistence/file_config_repository.cpp
+  persistence/vertical_settings_file.cpp
+  secrets/platform_secret_store.cpp
+)
 target_link_libraries(multistream_adapters PUBLIC multistream_core)
 set_target_properties(multistream_adapters PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(APPLE)

@@ -21,10 +21,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "destinations/runtime_requirements.hpp"
 #include "dock/destinations_dock.hpp"
 #include "dock/dock_controller.hpp"
+#include "dock/vertical_controller.hpp"
+#include "dock/vertical_dock.hpp"
 #include "persistence/file_config_repository.hpp"
 #include "secrets/platform_secret_store.hpp"
 #include "streaming/streaming_engine.hpp"
-#include "streaming/video_sources.hpp"
+#include "vertical_canvas/vertical_canvas.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -48,15 +50,21 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 namespace {
 
 constexpr const char *kDockId = "obs-multi-stream-destinations";
+constexpr const char *kVerticalDockId = "obs-multi-stream-vertical";
+
+std::string module_config_path(const char *file)
+{
+	char *path = obs_module_config_path(file);
+	const std::string result = path != nullptr ? path : "";
+	bfree(path);
+	return result;
+}
 
 std::unique_ptr<multistream::SecretStore> make_secret_store()
 {
 #if defined(MULTI_STREAM_E2E_SECRETS)
-	char *path = obs_module_config_path("e2e-secrets.txt");
-	const std::string file = path != nullptr ? path : "";
-	bfree(path);
 	obs_log(LOG_WARNING, "%s: stream keys come from a test file", multistream::E2eFileSecretStore::marker());
-	return std::make_unique<multistream::E2eFileSecretStore>(file);
+	return std::make_unique<multistream::E2eFileSecretStore>(module_config_path("e2e-secrets.txt"));
 #else
 	return multistream::make_platform_secret_store();
 #endif
@@ -68,7 +76,8 @@ struct Composition {
 	explicit Composition(const std::string &config_path)
 		: repository(config_path),
 		  secrets(make_secret_store()),
-		  engine(secrets, video_sources, [this](std::function<void()> work) {
+		  vertical(module_config_path("vertical.json")),
+		  engine(secrets, vertical, [this](std::function<void()> work) {
 			  QMetaObject::invokeMethod(&dispatch_target, std::move(work), Qt::QueuedConnection);
 		  })
 	{
@@ -76,10 +85,11 @@ struct Composition {
 
 	multistream::FileConfigRepository repository;
 	std::shared_ptr<multistream::SecretStore> secrets;
-	multistream::MainMixVideoSources video_sources;
+	multistream::VerticalCanvas vertical;
 	multistream::StreamingEngine engine;
 	QObject dispatch_target;
 	std::unique_ptr<multistream::DockController> controller;
+	std::unique_ptr<multistream::VerticalController> vertical_controller;
 #if defined(MULTI_STREAM_E2E_SECRETS)
 	std::unique_ptr<multistream::E2eCommands> e2e_commands;
 #endif
@@ -93,6 +103,8 @@ void tear_down()
 {
 	if (composition) {
 		composition->engine.shutdown();
+		composition->vertical_controller.reset();
+		composition->vertical.detach();
 		composition.reset();
 	}
 }
@@ -107,6 +119,21 @@ void on_frontend_event(obs_frontend_event event, void *)
 	}
 
 	switch (event) {
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
+		composition->vertical.attach();
+		break;
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
+		// The canvas belongs to the collection that is about to be unloaded.
+		composition->engine.stop_source_now(multistream::VideoSource::Vertical);
+		composition->vertical.detach();
+		break;
+	case OBS_FRONTEND_EVENT_PROFILE_CHANGED:
+		composition->vertical.refresh_video();
+		break;
+	case OBS_FRONTEND_EVENT_CANVAS_REMOVED:
+		composition->vertical.check_removed();
+		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
 		composition->engine.main_stream_starting();
 		break;
@@ -122,6 +149,9 @@ void on_frontend_event(obs_frontend_event event, void *)
 		break;
 	case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:
 		composition->engine.shutdown();
+		// Before OBS starts closing windows, which the preview's native view depends on.
+		composition->vertical_controller.reset();
+		composition->vertical.detach();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 		obs_frontend_remove_event_callback(on_frontend_event, nullptr);
@@ -132,17 +162,9 @@ void on_frontend_event(obs_frontend_event event, void *)
 	}
 }
 
-std::string config_file_path()
-{
-	char *path = obs_module_config_path("destinations.json");
-	const std::string result = path != nullptr ? path : "";
-	bfree(path);
-	return result;
-}
-
 void activate_features()
 {
-	const std::string path = config_file_path();
+	const std::string path = module_config_path("destinations.json");
 	if (path.empty()) {
 		obs_log(LOG_ERROR, "could not resolve the config path: features are disabled");
 		return;
@@ -171,10 +193,18 @@ void activate_features()
 			dock);
 	}
 
+	auto *vertical_dock = new multistream::VerticalDock();
+	if (!obs_frontend_add_dock_by_id(kVerticalDockId, obs_module_text("Vertical.DockTitle"), vertical_dock)) {
+		obs_log(LOG_ERROR, "could not add the vertical canvas dock");
+		delete vertical_dock;
+	} else {
+		composition->vertical_controller = std::make_unique<multistream::VerticalController>(
+			composition->vertical, composition->engine, vertical_dock);
+	}
+
 #if defined(MULTI_STREAM_E2E_SECRETS)
-	char *commands_path = obs_module_config_path("e2e-commands.txt");
-	composition->e2e_commands = std::make_unique<multistream::E2eCommands>(commands_path, composition->engine);
-	bfree(commands_path);
+	composition->e2e_commands = std::make_unique<multistream::E2eCommands>(
+		module_config_path("e2e-commands.txt"), composition->engine, composition->vertical, vertical_dock);
 #endif
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);

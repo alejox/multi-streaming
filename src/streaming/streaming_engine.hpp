@@ -87,6 +87,13 @@ public:
 	// that is still connecting cannot be stopped until it stops connecting.
 	void stop_everything_now();
 
+	// Force-stops and releases the outputs on one source, for when that source goes away.
+	void stop_source_now(VideoSource source);
+
+	// True while anything may still use that source's video: its destinations, or for
+	// the vertical canvas any output still being retired.
+	bool video_in_use(VideoSource source);
+
 	// Like stop_everything_now, and refuses later starts. Safe to call repeatedly.
 	void shutdown();
 
@@ -116,6 +123,7 @@ private:
 	void return_lease(std::string &key);
 
 	void fail_start(Slot &slot, const std::string &reason);
+	void wait_for_retired_outputs();
 	void issue_requested_stop(Slot &slot);
 	void retire_output(Slot &slot, bool force_stop);
 	void force_stop_and_release(Slot &slot);

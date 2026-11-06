@@ -73,7 +73,7 @@ Isolated-instance technique, which leaves the user's running OBS alone:
 - [x] T3 Secrets and persistence: `SecretStore` port, Keychain adapter, config file repository with no keys in JSON (test-first). Route: delegated (same writer). Commit `669e6ed`.
 - [x] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Commit `7c0e412`; runtime defect D1 fixed in the commit recorded under D1.
 - [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: runs inside OBS and the engine behind it is proven, but the dock has no UI proof. Commit `6d1461f`.
-- [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated.
+- [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated (2+ non-trivial files). Status: runtime proof partial, UI pending. Commit: the one recording this line.
 - [ ] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: delegated.
 
 ## Acceptance criteria
@@ -100,7 +100,7 @@ Isolated-instance technique, which leaves the user's running OBS alone:
 
 ## Progress
 
-Branch `feat/native-multistream`. T1 to T4 are complete. T5 runs inside OBS without UI proof. D1 is fixed in `9f49a38`. D2 is fixed in the commit that records this line.
+Branch `feat/native-multistream`. T1 to T4 are complete. T5 and T6 run inside OBS without UI proof. D1 is fixed in `9f49a38` and D2 in `5b1d4da`. Runtime-test support is in `bbcc657`.
 
 Build decisions:
 
@@ -144,6 +144,25 @@ D2, Keychain read blocking the UI thread during `STREAMING_STARTING` (fixed):
 - The encoder plan is still made once per batch when the start is requested, so a slow read cannot change what the batch shares.
 - A read still blocked at exit keeps its main-encoder references, so OBS reports 2 leaks in that case (observed).
 
+T6 findings, all from OBS 33.0.1 sources and observed in isolated runs:
+
+- Canvas flags are `ACTIVATE | SCENE_REF` (saved as `flags: 10`), not `PROGRAM`. `PROGRAM` adds `MIX_AUDIO`, which makes the canvas's channel a root of the global audio mix (`obs-audio.c:594-596`). With a 440 Hz tone only in the vertical scene, main's sink measured -36.1 dB under `PROGRAM` and -91 dB (silence) without it, so `PROGRAM` leaks vertical-only audio into main.
+- A source in both main and vertical is not doubled under either flag: main-only, both with the chosen flags, and both with `PROGRAM` all measure -36.1 dB. libobs mixes a duplicated source once (`push_audio_tree2`, `obs-audio.c:60-85`).
+- Vertical destinations carry the audio track chosen for them from the main mix. A source only in the vertical scene is therefore silent on every destination (-91 dB on the vertical sink too), which is the requested behavior and worth saying in T7's README.
+- The canvas is per scene collection, because OBS stores it there. A new collection gets its own canvas and an empty first scene. Resolution and program scene live in `plugin_config/obs-multi-stream/vertical.json`.
+- `obs_canvas_reset_video` frees the old mix, so a change is refused while a vertical destination runs or an output is still retiring. Retired outputs hold a canvas reference until destroyed, so the mix outlives any encoder bound to it.
+- Fit and Fill use scene item bounds, so libobs keeps them right when the source changes size. A resolution change re-applies them to every scene.
+- The preview's display exists only while the widget is visible and is released at `SCRIPTING_SHUTDOWN`. Keeping it later crashed three runs at exit: the OpenGL renderer queues `[NSOpenGLContext update]` on the main thread after a resize (`__gl_update_block_invoke`), and by then the Qt window is gone. Three later exits with the dock visible did not crash, but this timing fix is not a proof that the race is closed.
+- A floating dock closing at exit makes OBS show its one-time `DockCloseWarning` dialog, which blocks shutdown until answered. That is OBS behavior for any floating dock. It appeared on the desktop during two test runs before `WarnedAboutClosingDocks=true` was seeded.
+
+Removal residue, for T7 (observed with the plugin deleted from the isolated install):
+
+- The collection JSON keeps `canvases[].info` with `name: obs-multi-stream-vertical`, and each vertical scene stays in `sources` with that `canvas_uuid`. OBS keeps re-saving them.
+- OBS loads this without errors. The canvas has no video mix and no scene shows in the UI. The main stream connected, grew, and exited with code 0 and 0 leaks.
+- A source used only by a vertical scene stays referenced, so it stays in the file.
+- Hand cleanup, tried once with the same result: empty `canvases`, and delete the `sources` entries with that `canvas_uuid`.
+- Other files left behind: `plugin_config/obs-multi-stream/` and the Keychain items under the production service.
+
 ## Verification evidence
 
 - T1 RED: `cmake --build build_tests` failed on the missing `destinations/runtime_requirements.hpp`. GREEN after implementation.
@@ -171,6 +190,16 @@ D2, Keychain read blocking the UI thread during `STREAMING_STARTING` (fixed):
   - Sync stop through `obs_frontend_streaming_stop`: `starting, live, stopping, idle`, exit 0, 0 leaks.
   - Peer that never answers the handshake, stop then exit, and exit alone: UI not blocked, others kept growing, exit 0 after about 22 s, `left running` logged, 2 leaks.
 - `cmake --preset macos` and `cmake --build --preset macos`: BUILD SUCCEEDED, and the post-build check reports no end-to-end store in the binary.
+- T6 RED, assertion level: with stubs, `vertical_settings_test` failed 12 of 14, `runtime_requirements_test` 1 of 4, and `session_selection_test` 2 of 7. GREEN after implementation.
+- T6 runtime, E2E build, main and vertical destinations streaming at once: main's `ffprobe` shows `h264,640,360`, vertical's `h264,1080,1920`, both `aac,48000`, and all sinks grew. A frame extracted from the vertical stream shows the green test source (luma 144). Exit 0, 0 leaks.
+- T6 restart: scene, item, and resolution came back from the collection and `vertical.json`, and the vertical stream was again 1080x1920 with the same picture. Exit 0, 0 leaks.
+- T6 scene and composition API through the command hook: add, rename, switch, and remove scenes; the last scene refused; add, hide, show, reorder, and remove items; Fill. Each result read back in the log. Not through dock buttons.
+- T6 resolution: odd size is `Invalid`. Change while live is `RefusedWhileLive`, also right after a stop while the output is retiring. Applied 2 s later.
+- T6 preview: with the dock shown by the hook, the draw callback's frame counter rose (406 to 970), so `obs_canvas_render` runs in the display. Nobody has looked at the picture, resize, or high-DPI.
+- T6 lifecycle with a vertical destination live: a collection change stopped it, gave a new canvas in the other collection, and restored items on return. A profile change to 60 fps stopped it and kept the canvas. It streamed again in between. Exit 0, 0 leaks.
+- One run, a vertical start failing shortly before exit, reported 1 leak, against 0 in a similar run. Not investigated.
+- Default build: `rg -a` finds no marker in its binary, one in the E2E binary. Rechecks on the final code: retries out, closed port, and slow key all passed again.
+- Not verified for T6: every dock button and dialog, preview appearance, resize, high-DPI, docking and undocking, the feature-disabled path, and Metal (runs used the OpenGL renderer).
 - Verifier's isolated runs before D1 and D2: checks 1, 2, 3, 5, 6, 7, and 8 passed, with three VideoToolbox sessions concurrent. The same runs reported 1407 leaks as the plugin-free baseline at live-stream exit. Runs with SIGINT and the fix report 0.
 - D2 runtime, key read delayed 9 s for one destination and denied after 0.5 s for another, started while the UI was idle: main connected in 0.15 s, the other destination was live in 0.16 s, the slow one in 9.08 s, the denied one failed alone in 0.51 s, and all three streams grew. A `sample` during the read shows the main thread in its event loop. Exit 0, 0 leaks.
 - D2 stop during the read: `idle` at once, no connect afterwards, exit 0, 0 leaks. Exit during a 60 s read: exit 0 in 0.23 s, 2 leaks.
@@ -179,4 +208,4 @@ D2, Keychain read blocking the UI thread during `STREAMING_STARTING` (fixed):
 
 ## Next step
 
-T6, then T7. T5 needs a human UI check.
+A human UI check for T5 and T6, then T7.

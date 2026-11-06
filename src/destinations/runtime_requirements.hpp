@@ -15,4 +15,7 @@ constexpr std::uint32_t make_obs_version(std::uint32_t major, std::uint32_t mino
 
 bool is_runtime_supported(std::uint32_t obs_version);
 
+// Whether the vertical canvas may use the Canvas API on this OBS.
+bool is_canvas_api_tested(std::uint32_t obs_version);
+
 } // namespace multistream

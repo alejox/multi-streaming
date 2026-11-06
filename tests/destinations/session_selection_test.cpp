@@ -85,3 +85,34 @@ TEST_CASE(row_actions_follow_the_session_state)
 	CHECK(!row_actions(SessionState::Stopping).can_stop);
 	CHECK(!row_actions(SessionState::Stopping).can_edit);
 }
+
+TEST_CASE(only_running_destinations_on_the_given_source_are_selected)
+{
+	using multistream::VideoSource;
+	std::vector<multistream::Destination> destinations(3);
+	destinations[0].id = "main";
+	destinations[1].id = "vertical-live";
+	destinations[1].video_source = VideoSource::Vertical;
+	destinations[2].id = "vertical-idle";
+	destinations[2].video_source = VideoSource::Vertical;
+
+	const std::map<std::string, multistream::SessionState> states = {
+		{"main", multistream::SessionState::Live},
+		{"vertical-live", multistream::SessionState::Reconnecting},
+		{"vertical-idle", multistream::SessionState::Idle},
+	};
+
+	const std::vector<std::string> selected = multistream::select_running_on(destinations, states, VideoSource::Vertical);
+	REQUIRE(selected.size() == 1u);
+	CHECK_EQ(selected[0], std::string("vertical-live"));
+}
+
+TEST_CASE(a_destination_still_stopping_counts_as_running_on_its_source)
+{
+	using multistream::VideoSource;
+	std::vector<multistream::Destination> destinations(1);
+	destinations[0].id = "v";
+	destinations[0].video_source = VideoSource::Vertical;
+	const std::map<std::string, multistream::SessionState> states = {{"v", multistream::SessionState::Stopping}};
+	CHECK_EQ(multistream::select_running_on(destinations, states, VideoSource::Vertical).size(), 1u);
+}
