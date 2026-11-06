@@ -14,6 +14,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace multistream {
 namespace {
 

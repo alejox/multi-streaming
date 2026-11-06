@@ -1,6 +1,7 @@
 #include "destinations/reconnect_history.hpp"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace multistream {
 
