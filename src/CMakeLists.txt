@@ -53,4 +53,7 @@ set_target_properties(multistream_adapters PROPERTIES POSITION_INDEPENDENT_CODE 
 if(APPLE)
   target_sources(multistream_adapters PRIVATE secrets/keychain_secret_store.cpp)
   target_link_libraries(multistream_adapters PUBLIC "-framework CoreFoundation" "-framework Security")
+elseif(WIN32)
+  target_sources(multistream_adapters PRIVATE secrets/windows_credential_store.cpp)
+  target_link_libraries(multistream_adapters PUBLIC Advapi32)
 endif()
