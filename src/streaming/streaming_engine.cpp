@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <mutex>
+#include <thread>
 
 namespace multistream {
 namespace {
@@ -203,8 +204,9 @@ private:
 	Dispatcher dispatcher_;
 };
 
-StreamingEngine::StreamingEngine(SecretStore &secrets, VideoSources &video_sources, Dispatcher dispatcher)
-	: secrets_(secrets),
+StreamingEngine::StreamingEngine(std::shared_ptr<SecretStore> secrets, VideoSources &video_sources,
+				 Dispatcher dispatcher)
+	: secrets_(std::move(secrets)),
 	  video_sources_(video_sources),
 	  channel_(std::make_shared<WorkerChannel>(std::move(dispatcher)))
 {
@@ -300,12 +302,49 @@ void StreamingEngine::start(const std::vector<std::string> &ids)
 
 	// Only the destinations being started are grouped. An encoder already running under
 	// the same key is joined through its lease.
-	const MainStreamSnapshot main_stream = read_main_stream();
-	for (const EncoderAssignment &assignment : plan_encoders(startable, main_stream.encoders)) {
-		const std::shared_ptr<Slot> slot = find_slot(assignment.destination_id);
-		if (const auto failure = start_output(*slot, assignment, main_stream)) {
-			fail_start(*slot, *failure);
-		}
+	const auto main_stream = std::make_shared<const MainStreamSnapshot>(read_main_stream());
+	for (const EncoderAssignment &assignment : plan_encoders(startable, main_stream->encoders)) {
+		read_key_then_start(assignment, main_stream);
+	}
+}
+
+void StreamingEngine::read_key_then_start(const EncoderAssignment &assignment,
+					  std::shared_ptr<const MainStreamSnapshot> main_stream)
+{
+	const std::uint64_t ticket = key_reads_.issue(assignment.destination_id);
+
+	std::thread([this, ticket, assignment, main_stream = std::move(main_stream), secrets = secrets_,
+		     channel = channel_] {
+		SecretLookup key = secrets->get(assignment.destination_id);
+		channel->post([this, ticket, assignment, main_stream, key = std::move(key)] {
+			finish_start(ticket, assignment, *main_stream, key);
+		});
+	}).detach();
+}
+
+void StreamingEngine::finish_start(std::uint64_t ticket, const EncoderAssignment &assignment,
+				   const MainStreamSnapshot &main_stream, const SecretLookup &key)
+{
+	if (!key_reads_.redeem(assignment.destination_id, ticket)) {
+		return;
+	}
+	const std::shared_ptr<Slot> slot = find_slot(assignment.destination_id);
+	if (!slot) {
+		return;
+	}
+
+	std::optional<std::string> failure = start_blocker(slot->destination);
+	if (!failure && key.error) {
+		failure = key.error->message;
+	}
+	if (!failure && !key.secret) {
+		failure = std::string(obs_module_text("Failure.NoStreamKey"));
+	}
+	if (!failure) {
+		failure = start_output(*slot, assignment, main_stream, *key.secret);
+	}
+	if (failure) {
+		fail_start(*slot, *failure);
 	}
 }
 
@@ -323,6 +362,16 @@ void StreamingEngine::stop(const std::vector<std::string> &ids)
 			}
 		}
 		publish(*slot);
+
+		if (key_reads_.pending(id)) {
+			key_reads_.cancel(id);
+			{
+				const std::lock_guard<std::mutex> lock(slot->session_mutex);
+				slot->session.output_stopped();
+			}
+			publish(*slot);
+			continue;
+		}
 		issue_requested_stop(*slot);
 	}
 }
@@ -510,17 +559,9 @@ std::optional<std::string> StreamingEngine::start_blocker(const Destination &des
 }
 
 std::optional<std::string> StreamingEngine::start_output(Slot &slot, const EncoderAssignment &assignment,
-							 const MainStreamSnapshot &main_stream)
+							 const MainStreamSnapshot &main_stream, const std::string &key)
 {
 	const Destination &destination = slot.destination;
-
-	SecretLookup key = secrets_.get(destination.id);
-	if (key.error) {
-		return key.error->message;
-	}
-	if (!key.secret) {
-		return std::string(obs_module_text("Failure.NoStreamKey"));
-	}
 
 	std::string failure;
 	obs_encoder_t *video_encoder = lease_video_encoder(assignment, main_stream, failure);
@@ -537,7 +578,7 @@ std::optional<std::string> StreamingEngine::start_output(Slot &slot, const Encod
 
 	OBSDataAutoRelease service_settings = obs_data_create();
 	obs_data_set_string(service_settings, "server", destination.server_url.c_str());
-	obs_data_set_string(service_settings, "key", key.secret->c_str());
+	obs_data_set_string(service_settings, "key", key.c_str());
 	OBSServiceAutoRelease service = obs_service_create(kServiceId, object_name("service", destination.id).c_str(),
 							   service_settings, nullptr);
 	if (!service) {
@@ -691,6 +732,8 @@ void StreamingEngine::retire_output(Slot &slot, bool force_stop)
 
 void StreamingEngine::force_stop_and_release(Slot &slot)
 {
+	key_reads_.cancel(slot.destination.id);
+
 	const SessionState state = slot.state();
 	retire_output(slot, is_running(state) || state == SessionState::Stopping);
 

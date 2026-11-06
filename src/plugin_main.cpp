@@ -68,14 +68,14 @@ struct Composition {
 	explicit Composition(const std::string &config_path)
 		: repository(config_path),
 		  secrets(make_secret_store()),
-		  engine(*secrets, video_sources, [this](std::function<void()> work) {
+		  engine(secrets, video_sources, [this](std::function<void()> work) {
 			  QMetaObject::invokeMethod(&dispatch_target, std::move(work), Qt::QueuedConnection);
 		  })
 	{
 	}
 
 	multistream::FileConfigRepository repository;
-	std::unique_ptr<multistream::SecretStore> secrets;
+	std::shared_ptr<multistream::SecretStore> secrets;
 	multistream::MainMixVideoSources video_sources;
 	multistream::StreamingEngine engine;
 	QObject dispatch_target;

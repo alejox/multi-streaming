@@ -57,15 +57,22 @@ Commits read: obs-vertical-canvas `0d63170`, obs-multi-rtmp `a26d9b0`, obs-aitum
 - Per-target stats and reconnect signals (Multiple RTMP).
 - libobs reconnect defaults: 20 retries, 2 s base, exponent about 1.5, 15-minute cap (`obs-output.c`).
 
-Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; VideoToolbox concurrent session limits; Qt licensing terms.
+Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Qt licensing terms. Three VideoToolbox sessions ran concurrently in the verifier's runs; the upper limit is unknown.
+
+Isolated-instance technique, which leaves the user's running OBS alone:
+
+- `CFFIXED_USER_HOME="$H" /Applications/OBS.app/Contents/MacOS/OBS --multi --disable-updater`, with `HOME` left unset. Plugins and config come from `$H/Library/Application Support/obs-studio`.
+- In `$H`'s `global.ini`, `MacOSPermissionsDialogLastShown=1` and the first-run keys skip blocking dialogs. In `user.ini`, `ConfirmOnExit=false` lets SIGINT close OBS while streaming.
+- A `MULTI_STREAM_E2E_SECRETS` build, in a build directory of its own and copied into `$H`, reads fake keys from `plugin_config/obs-multi-stream/e2e-secrets.txt` and takes commands from `e2e-commands.txt`. So no run touches the Keychain or needs UI automation.
+- Sinks: `ffmpeg -listen 1 -i rtmp://127.0.0.1:<port>/live/<key> -c copy <file>.flv`. `sample <own pid>` shows whether the UI thread is blocked.
 
 ## Tasks
 
-- [ ] T1 Scaffold: buildable plugin with pinned OBS 33.0.1, core test target, and proof it loads in OBS. Route: delegated (preparation trigger, 2+ files). Commit `4773b63`. Build and install done; runtime load proof pending because OBS was already running.
+- [x] T1 Scaffold: buildable plugin with pinned OBS 33.0.1, core test target, and proof it loads in OBS. Route: delegated (preparation trigger, 2+ files). Commit `4773b63`. Load proof: the real OBS log at 21:31:53 showed `[obs-multi-stream] loaded version 0.1.0`, `loaded 0 destinations`, and `unloaded`, with leaks 0.
 - [x] T2 Destinations core: model, validation, config codec, reconnect policy, stats math, session state (test-first). Route: delegated (same writer). Commit `56b8ddc`.
 - [x] T3 Secrets and persistence: `SecretStore` port, Keychain adapter, config file repository with no keys in JSON (test-first). Route: delegated (same writer). Commit `669e6ed`.
 - [x] T4 Streaming engine: per-destination output/service/encoders from the main mix, encoder sharing, reconnect, stats, main-stream sync. Route: delegated. Commit `7c0e412`; runtime defect D1 fixed in the commit recorded under D1.
-- [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: compiled, runtime proof pending. Commit `6d1461f`.
+- [ ] T5 Destinations dock: list, editor, status, stats, thread-safe UI marshaling. Route: delegated. Status: runs inside OBS and the engine behind it is proven, but the dock has no UI proof. Commit `6d1461f`.
 - [ ] T6 Vertical canvas: canvas lifecycle, resolution settings, scenes, preview, basic composition, engine binding. Route: delegated.
 - [ ] T7 End-to-end proof and docs: local RTMP sink with main and vertical at once, README, install and license notes. Route: delegated.
 
@@ -81,7 +88,8 @@ Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Video
 ## Checks
 
 - Core: `ctest` from the configured test build.
-- Plugin: template macOS preset build, install to `~/Library/Application Support/obs-studio/plugins`, launch OBS, read its log.
+- Plugin: template macOS preset build. The build fails if the binary contains the end-to-end secret store.
+- Runtime: the isolated-instance technique under Reference evidence, streaming only to 127.0.0.1. A real install to `~/Library/Application Support/obs-studio/plugins` is the user's step.
 - Keychain writes during automated checks use a test-only service name and clean up after themselves.
 
 ## Delivery
@@ -92,7 +100,7 @@ Unverified going in: Canvas API behavior from this plugin on OBS 33 arm64; Video
 
 ## Progress
 
-Branch `feat/native-multistream`. T2 and T3 are complete. T1 is built and installed, and its load proof is still pending. T4 and T5 are compiled, not installed, and have never run inside OBS.
+Branch `feat/native-multistream`. T1 to T4 are complete. T5 runs inside OBS without UI proof. D1 is fixed in `9f49a38`. D2 is fixed in the commit that records this line.
 
 Build decisions:
 
@@ -130,6 +138,12 @@ D1, UI hang and crash when reconnect retries run out (cause proven, fixed):
 - Fix: `ConnectGate` tracks when the thread can be alive from output signals, and the known minimum delay before the next attempt. A stop waits for a clear gate. Destruction never runs on the UI thread: `DeferredWork` runs each retired output on its own thread after the gate clears, 1 s after the final signal.
 - Accepted limits: at a profile change or exit the UI waits up to 5 s for retired outputs. An output still connecting after that is left running and its leak reported. A peer that accepts TCP and never answers makes the OBS process itself wait for the 30 s RTMP timeout at exit (observed: exit 0 after 22 s, 2 leaks).
 
+D2, Keychain read blocking the UI thread during `STREAMING_STARTING` (fixed):
+
+- Main's connection was delayed 17 to 48 s behind prompts. Each key read now runs on its own thread, and its start finishes on the UI thread. `StartTickets` voids a read when a stop or teardown arrives first. A prompt or denial affects only its destination.
+- The encoder plan is still made once per batch when the start is requested, so a slow read cannot change what the batch shares.
+- A read still blocked at exit keeps its main-encoder references, so OBS reports 2 leaks in that case (observed).
+
 ## Verification evidence
 
 - T1 RED: `cmake --build build_tests` failed on the missing `destinations/runtime_requirements.hpp`. GREEN after implementation.
@@ -157,8 +171,12 @@ D1, UI hang and crash when reconnect retries run out (cause proven, fixed):
   - Sync stop through `obs_frontend_streaming_stop`: `starting, live, stopping, idle`, exit 0, 0 leaks.
   - Peer that never answers the handshake, stop then exit, and exit alone: UI not blocked, others kept growing, exit 0 after about 22 s, `left running` logged, 2 leaks.
 - `cmake --preset macos` and `cmake --build --preset macos`: BUILD SUCCEEDED, and the post-build check reports no end-to-end store in the binary.
+- Verifier's isolated runs before D1 and D2: checks 1, 2, 3, 5, 6, 7, and 8 passed, with three VideoToolbox sessions concurrent. The same runs reported 1407 leaks as the plugin-free baseline at live-stream exit. Runs with SIGINT and the fix report 0.
+- D2 runtime, key read delayed 9 s for one destination and denied after 0.5 s for another, started while the UI was idle: main connected in 0.15 s, the other destination was live in 0.16 s, the slow one in 9.08 s, the denied one failed alone in 0.51 s, and all three streams grew. A `sample` during the read shows the main thread in its event loop. Exit 0, 0 leaks.
+- D2 stop during the read: `idle` at once, no connect afterwards, exit 0, 0 leaks. Exit during a 60 s read: exit 0 in 0.23 s, 2 leaks.
+- D2 RED, assertion level: with a stub, `start_tickets_test` failed 6 of 6. GREEN after implementation.
 - D1 RED, assertion level: with stubs, `connect_gate_test` failed 8 of 11 and `deferred_work_test` 6 of 6. GREEN after implementation.
 
 ## Next step
 
-With OBS closed by the user: install the build, launch OBS, prove the T1 load, then run the T4 and T5 runtime checks against a local RTMP sink. Check off T1, T4, and T5 only on observed behavior. Then T6.
+T6, then T7. T5 needs a human UI check.

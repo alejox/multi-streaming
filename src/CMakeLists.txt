@@ -25,6 +25,7 @@ add_library(
   destinations/runtime_requirements.cpp
   destinations/session.cpp
   destinations/session_selection.cpp
+  destinations/start_tickets.cpp
   destinations/stream_stats.cpp
   destinations/validation.cpp
 )

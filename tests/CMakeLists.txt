@@ -37,6 +37,7 @@ add_core_test(destination_removal_test destinations/destination_removal_test.cpp
 add_core_test(destination_editing_test destinations/destination_editing_test.cpp)
 add_core_test(encoder_plan_test destinations/encoder_plan_test.cpp)
 add_core_test(encoder_leases_test destinations/encoder_leases_test.cpp)
+add_core_test(start_tickets_test destinations/start_tickets_test.cpp)
 add_core_test(session_selection_test destinations/session_selection_test.cpp)
 add_core_test(connect_gate_test destinations/connect_gate_test.cpp)
 add_core_test(deferred_work_test destinations/deferred_work_test.cpp)

@@ -10,6 +10,10 @@
 // the UI thread only stops an output when the gate is clear, and never destroys one: a
 // retired output goes to its own thread, which waits for the gate first.
 //
+// Reading a stream key can block for as long as a Keychain prompt stays open, so each read
+// runs on its own thread, and its start finishes on the UI thread unless a stop or
+// teardown voided its ticket meanwhile.
+//
 // Lifetime: a retired output no longer reaches its slot, and its signals are disconnected
 // before it is released, without holding a mutex, since signal_handler_disconnect waits
 // for a running callback. The owner shuts the engine down before destroying the
@@ -22,6 +26,7 @@
 #include "destinations/encoder_plan.hpp"
 #include "destinations/secret_store.hpp"
 #include "destinations/session.hpp"
+#include "destinations/start_tickets.hpp"
 #include "destinations/stream_stats.hpp"
 #include "streaming/main_stream_encoders.hpp"
 #include "streaming/video_sources.hpp"
@@ -52,7 +57,8 @@ public:
 	using Dispatcher = std::function<void(std::function<void()>)>;
 	using StatusListener = std::function<void(const DestinationStatus &)>;
 
-	StreamingEngine(SecretStore &secrets, VideoSources &video_sources, Dispatcher dispatcher);
+	// The store is shared because a read blocked on a prompt can outlive the engine.
+	StreamingEngine(std::shared_ptr<SecretStore> secrets, VideoSources &video_sources, Dispatcher dispatcher);
 	~StreamingEngine();
 
 	StreamingEngine(const StreamingEngine &) = delete;
@@ -98,8 +104,11 @@ private:
 	std::map<std::string, SessionState> session_states() const;
 
 	std::optional<std::string> start_blocker(const Destination &destination);
+	void read_key_then_start(const EncoderAssignment &assignment, std::shared_ptr<const MainStreamSnapshot> main_stream);
+	void finish_start(std::uint64_t ticket, const EncoderAssignment &assignment,
+			  const MainStreamSnapshot &main_stream, const SecretLookup &key);
 	std::optional<std::string> start_output(Slot &slot, const EncoderAssignment &assignment,
-						const MainStreamSnapshot &main_stream);
+						const MainStreamSnapshot &main_stream, const std::string &key);
 	obs_encoder_t *lease_video_encoder(const EncoderAssignment &assignment, const MainStreamSnapshot &main_stream,
 					   std::string &failure);
 	obs_encoder_t *lease_audio_encoder(const EncoderAssignment &assignment, const MainStreamSnapshot &main_stream,
@@ -117,7 +126,7 @@ private:
 	void publish(Slot &slot);
 	static DestinationStatus status_of(const Slot &slot);
 
-	SecretStore &secrets_;
+	std::shared_ptr<SecretStore> secrets_;
 	VideoSources &video_sources_;
 	std::shared_ptr<WorkerChannel> channel_;
 	StatusListener listener_;
@@ -125,6 +134,7 @@ private:
 	std::vector<Destination> destinations_;
 	std::map<std::string, std::shared_ptr<Slot>> slots_;
 
+	StartTickets key_reads_;
 	EncoderLeases leases_;
 	std::map<std::string, OBSEncoder> encoders_;
 	DeferredWork retired_outputs_;
