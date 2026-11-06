@@ -56,6 +56,19 @@ TEST_CASE(encodes_the_schema_version)
 	CHECK(encoded.find("\"schema_version\": 2") != std::string::npos);
 }
 
+TEST_CASE(color_icons_round_trips_and_defaults_to_false)
+{
+	DestinationsConfig config;
+	config.color_icons = true;
+	const auto decoded = decode_config(encode_config(config));
+	REQUIRE(std::holds_alternative<DestinationsConfig>(decoded));
+	CHECK(std::get<DestinationsConfig>(decoded).color_icons);
+
+	const auto defaults = decode_config(R"({"schema_version": 2, "destinations": []})");
+	REQUIRE(std::holds_alternative<DestinationsConfig>(defaults));
+	CHECK(!std::get<DestinationsConfig>(defaults).color_icons);
+}
+
 TEST_CASE(never_carries_a_key_found_in_the_input)
 {
 	const char *hand_edited = R"({"schema_version": 1, "destinations": [{

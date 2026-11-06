@@ -4,6 +4,7 @@
 
 #include <obs-module.h>
 
+#include <QCheckBox>
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -106,8 +107,17 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	connect(start_all, &QPushButton::clicked, this, &DestinationsDock::start_all_requested);
 	connect(stop_all, &QPushButton::clicked, this, &DestinationsDock::stop_all_requested);
 
+	color_icons_check_ = new QCheckBox(obs_module_text("Dock.ColorIcons"), this);
+	color_icons_check_->setToolTip(obs_module_text("Dock.ColorIconsHint"));
+	connect(color_icons_check_, &QCheckBox::toggled, this, [this](bool on) {
+		color_icons_on_ = on;
+		apply_row_icons_all();
+		emit color_icons_toggled(on);
+	});
+
 	auto *buttons = new QHBoxLayout();
 	buttons->addWidget(add);
+	buttons->addWidget(color_icons_check_);
 	buttons->addStretch();
 	buttons->addWidget(start_all);
 	buttons->addWidget(stop_all);
@@ -154,6 +164,7 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 
 	RowWidgets widgets;
 	widgets.icon_file = view.icon_file;
+	widgets.brand_color = view.brand_color;
 	widgets.icon = new QLabel(row);
 
 	auto *name = new QLabel(view.name, row);
@@ -181,6 +192,10 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.toggle->setIconSize(QSize(kButtonIconSize, kButtonIconSize));
 
 	auto *menu = new QMenu(row);
+	widgets.move_up = menu->addAction(themed_icon("icons/ui/up.svg", palette()), obs_module_text("Dock.MoveUp"));
+	widgets.move_down =
+		menu->addAction(themed_icon("icons/ui/down.svg", palette()), obs_module_text("Dock.MoveDown"));
+	menu->addSeparator();
 	widgets.edit = menu->addAction(obs_module_text("Dock.Edit"));
 	menu->addSeparator();
 	widgets.remove = menu->addAction(obs_module_text("Dock.Delete"));
@@ -206,6 +221,8 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	});
 	connect(widgets.edit, &QAction::triggered, this, [this, id] { emit edit_requested(id); });
 	connect(widgets.remove, &QAction::triggered, this, [this, id] { emit delete_requested(id); });
+	connect(widgets.move_up, &QAction::triggered, this, [this, id] { emit move_up_requested(id); });
+	connect(widgets.move_down, &QAction::triggered, this, [this, id] { emit move_down_requested(id); });
 
 	auto *title_line = new QHBoxLayout();
 	title_line->setSpacing(6);
@@ -263,19 +280,37 @@ void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowSta
 void DestinationsDock::apply_row_icons(RowWidgets &widgets)
 {
 	const qreal ratio = devicePixelRatioF();
-	widgets.icon->setPixmap(themed_pixmap(widgets.icon_file.c_str(), palette(), kPlatformIconSize, ratio));
+	const QColor platform_color = color_icons_on_ && widgets.brand_color.isValid()
+					      ? widgets.brand_color
+					      : palette().color(QPalette::Active, QPalette::WindowText);
+	widgets.icon->setPixmap(colored_pixmap(widgets.icon_file.c_str(), platform_color, kPlatformIconSize, ratio));
 	widgets.dot->setPixmap(status_dot(widgets.tone, palette(), ratio));
 	widgets.toggle->setIcon(themed_icon(widgets.stops ? "icons/ui/stop.svg" : "icons/ui/start.svg", palette()));
 	widgets.more->setIcon(themed_icon("icons/ui/more.svg", palette()));
+}
+
+void DestinationsDock::set_color_icons(bool on)
+{
+	color_icons_on_ = on;
+	if (color_icons_check_) {
+		const QSignalBlocker blocker(color_icons_check_);
+		color_icons_check_->setChecked(on);
+	}
+	apply_row_icons_all();
+}
+
+void DestinationsDock::apply_row_icons_all()
+{
+	for (auto &[id, widgets] : rows_) {
+		apply_row_icons(widgets);
+	}
 }
 
 void DestinationsDock::changeEvent(QEvent *event)
 {
 	QWidget::changeEvent(event);
 	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange) {
-		for (auto &[id, widgets] : rows_) {
-			apply_row_icons(widgets);
-		}
+		apply_row_icons_all();
 	}
 }
 

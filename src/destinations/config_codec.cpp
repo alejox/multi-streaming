@@ -181,7 +181,9 @@ std::string encode_config(const DestinationsConfig &config)
 		destinations.push_back(encode_destination(destination));
 	}
 
-	const json document = {{"schema_version", kConfigSchemaVersion}, {"destinations", std::move(destinations)}};
+	const json document = {{"schema_version", kConfigSchemaVersion},
+			      {"destinations", std::move(destinations)},
+			      {"color_icons", config.color_icons}};
 	// Replacing invalid UTF-8 keeps a bad name from turning a save into an exception.
 	return document.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
 }
@@ -210,6 +212,7 @@ std::variant<DestinationsConfig, ConfigError> decode_config(std::string_view tex
 	}
 
 	DestinationsConfig config;
+	config.color_icons = optional_bool(document, "color_icons", false);
 	std::set<std::string> seen_ids;
 	std::size_t index = 0;
 	for (const json &entry : *entries) {

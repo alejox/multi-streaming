@@ -53,8 +53,13 @@ struct Destination {
 
 struct DestinationsConfig {
 	std::vector<Destination> destinations;
+	// Show platform icons in their brand colors instead of the theme's monochrome.
+	bool color_icons = false;
 
-	bool operator==(const DestinationsConfig &other) const { return destinations == other.destinations; }
+	bool operator==(const DestinationsConfig &other) const
+	{
+		return destinations == other.destinations && color_icons == other.color_icons;
+	}
 };
 
 // Returns a new random id: 32 lowercase hexadecimal characters.

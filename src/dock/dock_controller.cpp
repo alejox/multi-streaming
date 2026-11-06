@@ -4,6 +4,7 @@
 #include "destinations/destination_removal.hpp"
 #include "destinations/session_selection.hpp"
 #include "dock/destination_editor_dialog.hpp"
+#include "dock/icons.hpp"
 #include "streaming/main_stream_encoders.hpp"
 
 #include <obs-module.h>
@@ -106,6 +107,11 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 	connect(dock, &DestinationsDock::add_requested, this, &DockController::add_destination);
 	connect(dock, &DestinationsDock::edit_requested, this, &DockController::edit_destination);
 	connect(dock, &DestinationsDock::delete_requested, this, &DockController::delete_destination);
+	connect(dock, &DestinationsDock::move_up_requested, this,
+		[this](const QString &id) { move_destination(id, true); });
+	connect(dock, &DestinationsDock::move_down_requested, this,
+		[this](const QString &id) { move_destination(id, false); });
+	connect(dock, &DestinationsDock::color_icons_toggled, this, &DockController::set_color_icons);
 	connect(dock, &DestinationsDock::start_all_requested, this, [this] { engine_.start_all(); });
 	connect(dock, &DestinationsDock::stop_all_requested, this, [this] { engine_.stop_all(); });
 	connect(dock, &DestinationsDock::start_requested, this,
@@ -116,6 +122,7 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 	connect(&stats_timer_, &QTimer::timeout, this, [this] { engine_.sample_stats(); });
 	stats_timer_.start(kStatsIntervalMilliseconds);
 
+	dock->set_color_icons(config_.color_icons);
 	refresh_rows();
 }
 
@@ -163,6 +170,56 @@ void DockController::delete_destination(const QString &id)
 		engine_.set_destinations(config_.destinations);
 		refresh_rows();
 	}
+}
+
+void DockController::move_destination(const QString &id, bool up)
+{
+	const std::string wanted = id.toStdString();
+	const auto found = std::find_if(config_.destinations.begin(), config_.destinations.end(),
+					[&](const Destination &destination) { return destination.id == wanted; });
+	if (found == config_.destinations.end()) {
+		return;
+	}
+
+	const auto index = static_cast<long long>(std::distance(config_.destinations.begin(), found));
+	const long long target = index + (up ? -1 : 1);
+	if (target < 0 || static_cast<std::size_t>(target) >= config_.destinations.size()) {
+		return;
+	}
+
+	DestinationsConfig updated = config_;
+	std::iter_swap(updated.destinations.begin() + index, updated.destinations.begin() + target);
+
+	const auto error = repository_.save(updated);
+	if (error) {
+		if (dock_) {
+			dock_->show_problem(QString::fromStdString(*error));
+		}
+		return;
+	}
+
+	config_ = std::move(updated);
+	refresh_rows();
+}
+
+void DockController::set_color_icons(bool on)
+{
+	if (config_.color_icons == on) {
+		return;
+	}
+
+	DestinationsConfig updated = config_;
+	updated.color_icons = on;
+	const auto error = repository_.save(updated);
+	if (error) {
+		if (dock_) {
+			dock_->show_problem(QString::fromStdString(*error));
+			dock_->set_color_icons(config_.color_icons);
+		}
+		return;
+	}
+
+	config_ = std::move(updated);
 }
 
 bool DockController::open_editor(const Destination &initial, bool is_new)
@@ -231,6 +288,7 @@ void DockController::refresh_rows()
 		row.source = text(destination.video_source == VideoSource::Vertical ? "Source.Vertical" : "Source.Main");
 		row.icon_file = std::string("icons/platforms/") +
 				platform_id(effective_platform(destination.platform, destination.server_url)) + ".svg";
+		row.brand_color = brand_color(effective_platform(destination.platform, destination.server_url));
 
 		const auto status = std::find_if(statuses.begin(), statuses.end(), [&](const DestinationStatus &candidate) {
 			return candidate.id == destination.id;

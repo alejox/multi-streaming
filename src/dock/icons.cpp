@@ -66,4 +66,37 @@ QPixmap themed_pixmap(const char *relative_path, const QPalette &palette, int lo
 	return pixmap;
 }
 
+QColor brand_color(Platform platform)
+{
+	switch (platform) {
+	case Platform::YouTube:
+		return QColor(0xFF, 0x00, 0x00);
+	case Platform::Kick:
+		return QColor(0x53, 0xFC, 0x18);
+	case Platform::Twitch:
+		return QColor(0x91, 0x46, 0xFF);
+	case Platform::Facebook:
+		return QColor(0x18, 0x77, 0xF2);
+	case Platform::TikTok:
+		return QColor(0xFE, 0x2C, 0x55);
+	case Platform::Instagram:
+		return QColor(0xE4, 0x40, 0x5F);
+	case Platform::X:
+	case Platform::Custom:
+	default:
+		return QColor();
+	}
+}
+
+QPixmap colored_pixmap(const char *relative_path, const QColor &color, int logical_size, qreal pixel_ratio)
+{
+	const QString path = data_path(relative_path);
+	if (path.isEmpty()) {
+		return {};
+	}
+	QPixmap pixmap = render(path, color, qRound(logical_size * pixel_ratio));
+	pixmap.setDevicePixelRatio(pixel_ratio);
+	return pixmap;
+}
+
 } // namespace multistream
