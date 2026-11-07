@@ -31,6 +31,10 @@ struct EncoderSpec {
 std::optional<EncoderSpec> video_encoder_spec(const EncoderPreference &preference, obs_encoder_t *main_video);
 std::optional<EncoderSpec> audio_encoder_spec();
 
+// Gives a copy of main's video encoder the same output rescale, which libobs keeps on the
+// encoder rather than in its settings. Call after obs_encoder_set_video, before first use.
+void copy_main_scaling(obs_encoder_t *copy, obs_encoder_t *main_video);
+
 struct VideoEncoderOption {
 	std::string id;
 	std::string display_name;

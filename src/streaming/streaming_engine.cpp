@@ -673,6 +673,11 @@ obs_encoder_t *StreamingEngine::lease_video_encoder(const EncoderAssignment &ass
 			return nullptr;
 		}
 		obs_encoder_set_video(created, video_sources_.video_for(assignment.video_source));
+		// A Share copy sends what main sends, rescale included; the vertical canvas has its own size.
+		if (assignment.video_encoder.mode == EncoderMode::Share &&
+		    assignment.video_source == VideoSource::Main) {
+			copy_main_scaling(created, main_stream.video);
+		}
 		encoder = created.Get();
 	}
 

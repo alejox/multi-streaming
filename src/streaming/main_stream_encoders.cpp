@@ -137,6 +137,17 @@ std::optional<EncoderSpec> video_encoder_spec(const EncoderPreference &preferenc
 	return spec_from_profile();
 }
 
+void copy_main_scaling(obs_encoder_t *copy, obs_encoder_t *main_video)
+{
+	if (copy == nullptr || main_video == nullptr || !obs_encoder_scaling_enabled(main_video)) {
+		return;
+	}
+	obs_encoder_set_scaled_size(copy, obs_encoder_get_width(main_video), obs_encoder_get_height(main_video));
+	if (obs_encoder_gpu_scaling_enabled(main_video)) {
+		obs_encoder_set_gpu_scale_type(copy, obs_encoder_get_scale_type(main_video));
+	}
+}
+
 std::vector<VideoEncoderOption> available_video_encoders()
 {
 	std::vector<VideoEncoderOption> options;

@@ -18,9 +18,17 @@ std::string video_key_for(const EncoderGroup &group)
 	return key;
 }
 
-bool can_reuse_main_video(const EncoderGroup &group, const MainStreamEncoders &main_stream)
+// OBS reconfigures or replaces its encoders once its stream stops, so only a destination
+// that stops with that stream may hold them.
+bool can_reuse_main(const Destination &destination, const MainStreamEncoders &main_stream)
 {
-	if (!main_stream.active || group.video_source != VideoSource::Main) {
+	return destination.sync_with_main && main_stream.active;
+}
+
+bool can_reuse_main_video(const Destination &destination, const EncoderGroup &group,
+			  const MainStreamEncoders &main_stream)
+{
+	if (!can_reuse_main(destination, main_stream) || group.video_source != VideoSource::Main) {
 		return false;
 	}
 	if (group.encoder.mode == EncoderMode::Share) {
@@ -49,11 +57,15 @@ std::vector<EncoderAssignment> plan_encoders(const std::vector<Destination> &des
 		assignment.destination_id = destination.id;
 		assignment.video_source = group->video_source;
 		assignment.video_encoder = group->encoder;
-		assignment.video_key = video_key_for(*group);
-		assignment.reuse_main_video = can_reuse_main_video(*group, main_stream);
+		// A running encoder is joined by key, so main's encoders get keys of their own: an
+		// independent destination must never join one, nor a follower join a copy.
+		assignment.reuse_main_video = can_reuse_main_video(destination, *group, main_stream);
+		assignment.video_key = assignment.reuse_main_video ? "video-obs-main" : video_key_for(*group);
 		assignment.audio_track = destination.audio_track;
-		assignment.audio_key = "audio-track-" + std::to_string(destination.audio_track);
-		assignment.reuse_main_audio = main_stream.active && main_stream.audio_track == destination.audio_track;
+		assignment.reuse_main_audio = can_reuse_main(destination, main_stream) &&
+					      main_stream.audio_track == destination.audio_track;
+		const std::string track = std::to_string(destination.audio_track);
+		assignment.audio_key = (assignment.reuse_main_audio ? "audio-obs-main-track-" : "audio-track-") + track;
 		plan.push_back(std::move(assignment));
 	}
 	return plan;

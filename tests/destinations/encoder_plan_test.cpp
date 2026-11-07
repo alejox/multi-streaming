@@ -25,6 +25,13 @@ Destination custom(const std::string &id, int bitrate, const std::string &encode
 	return destination;
 }
 
+// Only destinations that follow the main stream stop with it, so only they may hold its encoders.
+Destination following(Destination destination)
+{
+	destination.sync_with_main = true;
+	return destination;
+}
+
 MainStreamEncoders active_main()
 {
 	MainStreamEncoders main_stream;
@@ -102,7 +109,7 @@ TEST_CASE(nothing_reuses_an_inactive_main_stream)
 {
 	MainStreamEncoders inactive = active_main();
 	inactive.active = false;
-	const auto plan = plan_encoders({shared("a"), custom("b", 6000, "x264")}, inactive);
+	const auto plan = plan_encoders({following(shared("a")), following(custom("b", 6000, "x264"))}, inactive);
 	REQUIRE(plan.size() == 2);
 	CHECK(!plan[0].reuse_main_video);
 	CHECK(!plan[0].reuse_main_audio);
@@ -111,7 +118,7 @@ TEST_CASE(nothing_reuses_an_inactive_main_stream)
 
 TEST_CASE(share_on_the_main_mix_reuses_the_active_main_encoder)
 {
-	const auto plan = plan_encoders({shared("a")}, active_main());
+	const auto plan = plan_encoders({following(shared("a"))}, active_main());
 	REQUIRE(plan.size() == 1);
 	CHECK(plan[0].reuse_main_video);
 }
@@ -120,14 +127,15 @@ TEST_CASE(share_reuses_a_scaled_main_encoder_because_it_asks_for_what_main_sends
 {
 	MainStreamEncoders scaled = active_main();
 	scaled.video_scaled = true;
-	const auto plan = plan_encoders({shared("a")}, scaled);
+	const auto plan = plan_encoders({following(shared("a"))}, scaled);
 	REQUIRE(plan.size() == 1);
 	CHECK(plan[0].reuse_main_video);
 }
 
 TEST_CASE(vertical_never_reuses_the_main_video_encoder)
 {
-	const auto plan = plan_encoders({shared("a", VideoSource::Vertical), custom("b", 6000, "x264", VideoSource::Vertical)},
+	const auto plan = plan_encoders({following(shared("a", VideoSource::Vertical)),
+					 following(custom("b", 6000, "x264", VideoSource::Vertical))},
 					active_main());
 	REQUIRE(plan.size() == 2);
 	CHECK(!plan[0].reuse_main_video);
@@ -137,7 +145,8 @@ TEST_CASE(vertical_never_reuses_the_main_video_encoder)
 TEST_CASE(custom_reuses_the_main_encoder_only_on_an_exact_match)
 {
 	const auto plan = plan_encoders(
-		{custom("match", 6000, "x264"), custom("rate", 4000, "x264"), custom("id", 6000, "vt")}, active_main());
+		{following(custom("match", 6000, "x264")), following(custom("rate", 4000, "x264")),
+		 following(custom("id", 6000, "vt"))}, active_main());
 	REQUIRE(plan.size() == 3);
 	CHECK(plan[0].reuse_main_video);
 	CHECK(!plan[1].reuse_main_video);
@@ -148,15 +157,16 @@ TEST_CASE(custom_does_not_reuse_a_scaled_main_encoder)
 {
 	MainStreamEncoders scaled = active_main();
 	scaled.video_scaled = true;
-	const auto plan = plan_encoders({custom("a", 6000, "x264")}, scaled);
+	const auto plan = plan_encoders({following(custom("a", 6000, "x264"))}, scaled);
 	REQUIRE(plan.size() == 1);
 	CHECK(!plan[0].reuse_main_video);
 }
 
 TEST_CASE(audio_reuses_the_main_encoder_only_on_its_track)
 {
-	const auto plan = plan_encoders({shared("a", VideoSource::Vertical, 1), shared("b", VideoSource::Main, 2)},
-					active_main());
+	const auto plan = plan_encoders(
+		{following(shared("a", VideoSource::Vertical, 1)), following(shared("b", VideoSource::Main, 2))},
+		active_main());
 	REQUIRE(plan.size() == 2);
 	CHECK(plan[0].reuse_main_audio);
 	CHECK(!plan[1].reuse_main_audio);
@@ -166,7 +176,37 @@ TEST_CASE(audio_is_dedicated_when_the_main_track_is_unknown)
 {
 	MainStreamEncoders unknown = active_main();
 	unknown.audio_track.reset();
-	const auto plan = plan_encoders({shared("a")}, unknown);
+	const auto plan = plan_encoders({following(shared("a"))}, unknown);
 	REQUIRE(plan.size() == 1);
 	CHECK(!plan[0].reuse_main_audio);
+}
+
+TEST_CASE(a_destination_that_does_not_follow_main_never_holds_its_encoders)
+{
+	// It may outlive the main stream, whose encoders OBS reconfigures or replaces after it stops.
+	const auto plan = plan_encoders({shared("a"), custom("b", 6000, "x264")}, active_main());
+	REQUIRE(plan.size() == 2);
+	CHECK(!plan[0].reuse_main_video);
+	CHECK(!plan[0].reuse_main_audio);
+	CHECK(!plan[1].reuse_main_video);
+	CHECK(!plan[1].reuse_main_audio);
+}
+
+TEST_CASE(a_follower_and_an_independent_destination_never_share_an_encoder_key)
+{
+	// An encoder already running under a key is joined, so a key must name one lifetime.
+	const auto plan = plan_encoders({following(shared("a")), shared("b")}, active_main());
+	REQUIRE(plan.size() == 2);
+	CHECK(plan[0].reuse_main_video);
+	CHECK(plan[0].reuse_main_audio);
+	CHECK(plan[0].video_key != plan[1].video_key);
+	CHECK(plan[0].audio_key != plan[1].audio_key);
+}
+
+TEST_CASE(followers_keep_sharing_one_dedicated_encoder_when_main_is_inactive)
+{
+	const auto plan = plan_encoders({following(shared("a")), shared("b")}, {});
+	REQUIRE(plan.size() == 2);
+	CHECK_EQ(plan[0].video_key, plan[1].video_key);
+	CHECK_EQ(plan[0].audio_key, plan[1].audio_key);
 }

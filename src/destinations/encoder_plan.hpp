@@ -32,10 +32,11 @@ struct EncoderAssignment {
 // Plans encoders for the destinations being started, in their given order. Video
 // follows group_by_encoder; audio is shared per track.
 //
-// The main stream's encoder is reused only while that stream is active, and only for
-// the main mix: a Share destination asks for whatever main uses, and a Custom one
+// The main stream's encoders are reused only while that stream is active, only by a
+// destination that follows it (and so stops with it), and for video only on the main
+// mix: a Share destination asks for whatever main uses, and a Custom one
 // must match its encoder id and bitrate on an unscaled encoder. Otherwise the plan
-// asks for a dedicated encoder.
+// asks for a dedicated encoder. Reused encoders get keys apart from dedicated ones.
 std::vector<EncoderAssignment> plan_encoders(const std::vector<Destination> &destinations,
 					     const MainStreamEncoders &main_stream);
 
