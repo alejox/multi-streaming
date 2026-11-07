@@ -37,6 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "secrets/e2e_file_secret_store.hpp"
 #endif
 
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QMetaObject>
 #include <QObject>
@@ -232,6 +233,17 @@ void activate_features()
 
 bool obs_module_load(void)
 {
+#if defined(__APPLE__)
+	// OBS's own Qt ships no TLS backend, so QNetworkAccessManager cannot do HTTPS.
+	// Register the SecureTransport backend bundled inside this plugin (see CMakeLists.txt).
+	if (obs_module_t *module = obs_current_module()) {
+		if (const char *data_path = obs_get_module_data_path(module)) {
+			const std::filesystem::path plugins_dir = std::filesystem::path(data_path).parent_path() / "PlugIns";
+			QCoreApplication::addLibraryPath(QString::fromStdString(plugins_dir.u8string()));
+		}
+	}
+#endif
+
 	obs_log(LOG_INFO, "loaded version %s (built against libobs %d.%d.%d, running on OBS %s, Qt %s, frontend %s)",
 		PLUGIN_VERSION, LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER,
 		obs_get_version_string(), qVersion(), obs_frontend_get_main_window() ? "ready" : "pending");

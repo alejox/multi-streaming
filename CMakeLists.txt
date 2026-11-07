@@ -51,6 +51,30 @@ target_sources(
     src/vertical_canvas/vertical_canvas.cpp
 )
 
+if(APPLE)
+  # OBS's own Qt bundle ships no TLS backend plugin, so QNetworkAccessManager cannot do
+  # HTTPS. Bundle the SecureTransport backend (ad-hoc signed, as the bundle codesign with
+  # hardened runtime rejects unsigned nested code) and register its directory at load time
+  # (see plugin_main.cpp).
+  get_filename_component(_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+  set(_tls_backend_src "${_qt_prefix}/plugins/tls/libqsecuretransportbackend.dylib")
+  if(EXISTS "${_tls_backend_src}")
+    set(_tls_backend "${CMAKE_CURRENT_BINARY_DIR}/tls/libqsecuretransportbackend.dylib")
+    add_custom_command(
+      OUTPUT "${_tls_backend}"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/tls"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${_tls_backend_src}" "${_tls_backend}"
+      COMMAND codesign --force --sign - "${_tls_backend}"
+      DEPENDS "${_tls_backend_src}"
+      COMMENT "Ad-hoc signing the SecureTransport TLS backend for bundling"
+      VERBATIM)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE "${_tls_backend}")
+    set_source_files_properties("${_tls_backend}" PROPERTIES MACOSX_PACKAGE_LOCATION "PlugIns/tls")
+  else()
+    message(WARNING "SecureTransport TLS backend not found at ${_tls_backend_src}; Twitch login will fail")
+  endif()
+endif()
+
 if(MULTI_STREAM_E2E_SECRETS)
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/e2e/e2e_commands.cpp src/secrets/e2e_file_secret_store.cpp)
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE MULTI_STREAM_E2E_SECRETS)
