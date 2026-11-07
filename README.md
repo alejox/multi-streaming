@@ -2,7 +2,7 @@
 
 Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the system's secret store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), not in config files.
 
-> **Status: v0.1.0 released.** Windows, Linux and macOS packages are published on the [releases page](https://github.com/alejox/multi-streaming/releases). Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet, and neither the Windows nor the Linux package has been run inside OBS. See [Verification status](#verification-status).
+> **Status: v0.2.0 released.** Windows, Linux and macOS packages are published on the [releases page](https://github.com/alejox/multi-streaming/releases). Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet, and neither the Windows nor the Linux package has been run inside OBS. See [Verification status](#verification-status).
 
 ## Quick path
 
