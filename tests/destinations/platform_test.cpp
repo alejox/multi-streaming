@@ -69,8 +69,8 @@ TEST_CASE(presets_exist_only_where_verified)
 {
 	CHECK_EQ(preset_ingest_url(Platform::YouTube).value_or(""), "rtmps://a.rtmps.youtube.com:443/live2");
 	CHECK_EQ(preset_ingest_url(Platform::Facebook).value_or(""), "rtmps://rtmp-api.facebook.com:443/rtmp/");
+	CHECK_EQ(preset_ingest_url(Platform::Twitch).value_or(""), "rtmp://live.twitch.tv/app");
 	CHECK(!preset_ingest_url(Platform::Kick));
-	CHECK(!preset_ingest_url(Platform::Twitch));
 	CHECK(!preset_ingest_url(Platform::TikTok));
 	CHECK(!preset_ingest_url(Platform::X));
 	CHECK(!preset_ingest_url(Platform::Instagram));
@@ -95,6 +95,8 @@ TEST_CASE(picking_a_service_with_a_preset_fills_its_url)
 {
 	CHECK_EQ(url_after_picking(Platform::YouTube, "rtmp://old.example.com/app"),
 		 "rtmps://a.rtmps.youtube.com:443/live2");
+	CHECK_EQ(url_after_picking(Platform::Twitch, "rtmp://old.example.com/app"),
+		 "rtmp://live.twitch.tv/app");
 }
 
 TEST_CASE(picking_a_service_without_a_preset_keeps_a_pasted_url)

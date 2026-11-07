@@ -26,8 +26,9 @@ Platform detect_platform(std::string_view server_url);
 // What the user picked, else what the URL shows.
 Platform effective_platform(std::optional<Platform> stored, std::string_view server_url);
 
-// The ingest URL that OBS 33.0.1's own service list gives every user of the service, if
-// there is one. Others hand out per-user or regional URLs, which the user has to paste.
+// The ingest URL to prefill after picking a service, when every user of that service can
+// use it. Twitch's default is its classic universal endpoint; its regional servers are
+// per-region. Others hand out per-user URLs, which the user has to paste.
 std::optional<std::string> preset_ingest_url(Platform platform);
 
 // The URL field after picking a service: its preset if it has one. Without one, a URL the

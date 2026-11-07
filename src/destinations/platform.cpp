@@ -114,6 +114,8 @@ std::optional<std::string> preset_ingest_url(Platform platform)
 		return "rtmps://a.rtmps.youtube.com:443/live2";
 	case Platform::Facebook:
 		return "rtmps://rtmp-api.facebook.com:443/rtmp/";
+	case Platform::Twitch:
+		return "rtmp://live.twitch.tv/app";
 	default:
 		return std::nullopt;
 	}
