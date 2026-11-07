@@ -144,20 +144,43 @@ void VerticalPreview::release()
 void VerticalPreview::schedule_recreate(const char *reason)
 {
 	recreate_reason_ = reason;
+	recreate_forced_ = true;
 	recreate_timer_.start();
+}
+
+void VerticalPreview::schedule_position_check()
+{
+	if (!display_) {
+		return;
+	}
+	if (!recreate_forced_) {
+		recreate_reason_ = "moved inside its window";
+	}
+	recreate_timer_.start();
+}
+
+QPoint VerticalPreview::position_in_window() const
+{
+	return mapTo(window(), QPoint(0, 0));
 }
 
 void VerticalPreview::recreate_display()
 {
+	const bool forced = recreate_forced_;
+	recreate_forced_ = false;
 	if (!isVisible()) {
 		return;
 	}
+	const QPoint in_window = position_in_window();
+	if (!forced && display_ && in_window == display_position_) {
+		return;
+	}
 	// On macOS the OpenGL swapchain re-attaches its surface to the view only when its pixel
-	// size changes, so after a move to another screen at the same size the view stays blank
-	// or the surface stays where the view was mid-move. A fresh display, made once the
-	// window has settled, attaches to the view where it is now.
+	// size changes. A move to another screen, or a move inside the window at the same size
+	// (a wider window shifting the docks), leaves the view blank or the picture floating
+	// where the view used to be. A fresh display, made once the window has settled,
+	// attaches to the view where it is now.
 	const QSize pixels = pixel_size();
-	const QPoint in_window = mapTo(window(), QPoint(0, 0));
 	const QScreen *current = screen();
 	blog(LOG_INFO,
 	     "[obs-multi-stream] vertical preview %s, recreating its display at %dx%d px, at %d,%d in its window, "
@@ -283,6 +306,7 @@ void VerticalPreview::create_display()
 	if (!display_) {
 		return;
 	}
+	display_position_ = position_in_window();
 	obs_display_add_draw_callback(display_, draw, this);
 }
 
@@ -340,6 +364,9 @@ bool VerticalPreview::event(QEvent *event)
 		schedule_recreate("changed pixel ratio");
 	}
 #endif
+	if (event->type() == QEvent::Move) {
+		schedule_position_check();
+	}
 	// Docking and undocking can replace the native view that the display draws into.
 	if (event->type() == QEvent::WinIdChange) {
 		release();
@@ -358,6 +385,11 @@ bool VerticalPreview::eventFilter(QObject *watched, QEvent *event)
 	// While a recreate waits, every move of the window pushes it back until the move ends.
 	if (watched == watched_top_level_ && event->type() == QEvent::Move && recreate_timer_.isActive()) {
 		recreate_timer_.start();
+	}
+	// A resized window or a rearranged dock can shift the preview without resizing it.
+	if ((watched == watched_top_level_ && event->type() == QEvent::Resize) ||
+	    (watched == watched_window_ && event->type() == QEvent::Move)) {
+		schedule_position_check();
 	}
 	// A display lost while the window was hidden or off screen comes back once it is
 	// exposed again, without waiting for a resize.

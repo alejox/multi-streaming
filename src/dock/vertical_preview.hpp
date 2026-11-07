@@ -72,6 +72,10 @@ private:
 	// Recreates the display once the window has stopped moving after a screen or
 	// pixel-ratio change. Repeated requests and window moves push it back.
 	void schedule_recreate(const char *reason);
+	// Like schedule_recreate, but the display is remade only if the preview's position in
+	// its window differs from where the display was made by then.
+	void schedule_position_check();
+	QPoint position_in_window() const;
 	void recreate_display();
 	void watch_top_level();
 	PreviewMapping mapping() const;
@@ -92,6 +96,9 @@ private:
 	QTimer purge_timer_;
 	QTimer recreate_timer_;
 	const char *recreate_reason_ = "";
+	bool recreate_forced_ = false;
+	// Where the preview sat in its window when the current display was made.
+	QPoint display_position_;
 	// The top-level window holding this preview; its moves postpone a pending recreate.
 	QPointer<QWindow> watched_top_level_;
 	QWindow *watched_window_ = nullptr;
