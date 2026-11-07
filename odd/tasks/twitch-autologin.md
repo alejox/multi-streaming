@@ -27,7 +27,7 @@ remembers the session so later reconnects skip the browser.
 - L1 (request, verbatim): "puedes ayudarme con lo siguiente, y empecemos con twitch, me gustaria tener autologin, es decir, que haya un boton para que abra el navegador y realice la conexion en automatico"
 - L2 (decision): flow chosen = PKCE + localhost (`http://localhost:8090/`).
 - L3 (decision): "Sí, recordar sesión" — persist refresh token.
-- L4 (blocker, open): the Twitch app Client ID is pending from the user (dev.twitch.tv/console, OAuth redirect URL `http://localhost:8090/`). Core work proceeds with a placeholder; end-to-end auth needs the real value.
+- L4 (resolved): the real Twitch app Client ID was provided and set in `src/oauth/twitch_client_id.hpp` (commit `be856b5`). Redirect URI is `http://localhost:8090/`, category Application Integration, client type Public.
 - L5: `gentle-ai-worker` failed twice with "assistant reported an error" (0 tool calls), so T2 was implemented inline as the degradation path. `pkce_test` passes the RFC 7636 appendix B vector; full suite 28/28 green.
 - L6: T3-T5 implemented inline, full suite 31/31 green (commit `9cf21ff`).
 - L7: T6-T7 implemented inline; the macOS Xcode project was stale after the new sources, so the first link failed, `cmake --preset macos` regenerated it, and the rebuild succeeded (commit `69c1f17`). E2E auth still needs the real Client ID.
