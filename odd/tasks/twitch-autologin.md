@@ -32,3 +32,5 @@ remembers the session so later reconnects skip the browser.
 - L6: T3-T5 implemented inline, full suite 31/31 green (commit `9cf21ff`).
 - L7: T6-T7 implemented inline; the macOS Xcode project was stale after the new sources, so the first link failed, `cmake --preset macos` regenerated it, and the rebuild succeeded (commit `69c1f17`). E2E auth still needs the real Client ID.
 - L8: T8 locale strings and README note landed (commits `69c1f17` and `f1153cd`). Final state: core suite 31/31 green; macOS plugin build succeeded.
+- L9: real Twitch Client ID set (commit `be856b5`); first live test reached the redirect but failed on HTTPS.
+- L10: root cause of the live failure was OBS's Qt having no TLS backend. Bundled and ad-hoc signed `libqsecuretransportbackend.dylib` and registered its directory at load time (commit `9f4d312`).
