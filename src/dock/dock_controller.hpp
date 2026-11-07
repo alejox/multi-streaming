@@ -31,6 +31,7 @@ private:
 	void edit_destination(const QString &id);
 	void delete_destination(const QString &id);
 	void move_destination(const QString &id, bool up);
+	void move_destination_to(const QString &id, int insert_position);
 	void set_color_icons(bool on);
 	bool open_editor(const Destination &initial, bool is_new);
 	std::optional<QString> save(const Destination &destination, const std::optional<std::string> &new_key);

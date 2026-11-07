@@ -3,14 +3,17 @@
 #pragma once
 
 #include <QColor>
+#include <QPoint>
 #include <QString>
 #include <QWidget>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
 class QAction;
+class QFrame;
 class QCheckBox;
 class QLabel;
 class QPushButton;
@@ -67,13 +70,18 @@ signals:
 	void delete_requested(const QString &id);
 	void move_up_requested(const QString &id);
 	void move_down_requested(const QString &id);
+	// Drag and drop: put this destination right before the row now at insert_position
+	// (the row count means the end).
+	void move_to_requested(const QString &id, int insert_position);
 	void color_icons_toggled(bool on);
 
 protected:
 	void changeEvent(QEvent *event) override;
+	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
 	struct RowWidgets {
+		QLabel *handle = nullptr;
 		QLabel *icon = nullptr;
 		QLabel *dot = nullptr;
 		QLabel *state = nullptr;
@@ -96,14 +104,26 @@ private:
 	void apply_status(RowWidgets &widgets, const DestinationRowStatus &status);
 	void apply_row_icons(RowWidgets &widgets);
 	void apply_row_icons_all();
+	void start_drag(QWidget *handle, const QString &id);
+	int drop_position(int y) const;
+	void show_drop_indicator(int position);
 
 	QLabel *problem_ = nullptr;
 	QPushButton *dismiss_problem_ = nullptr;
 	QLabel *empty_ = nullptr;
 	QVBoxLayout *rows_layout_ = nullptr;
+	QWidget *rows_container_ = nullptr;
+	QFrame *drop_indicator_ = nullptr;
 	QCheckBox *color_icons_check_ = nullptr;
 	bool color_icons_on_ = false;
 	std::map<QString, RowWidgets> rows_;
+	int row_count_ = 0;
+	// Drag handles to their destination id; rebuilt with the rows.
+	std::map<QObject *, QString> handle_ids_;
+	QObject *pressed_handle_ = nullptr;
+	QPoint drag_start_;
+	// Set by a drop and emitted once the drag returns, so the rows are rebuilt outside it.
+	std::optional<std::pair<QString, int>> pending_move_;
 };
 
 } // namespace multistream

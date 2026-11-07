@@ -1,6 +1,7 @@
 #include "dock/dock_controller.hpp"
 
 #include "destinations/destination_editing.hpp"
+#include "destinations/destination_ordering.hpp"
 #include "destinations/destination_removal.hpp"
 #include "destinations/session_selection.hpp"
 #include "dock/destination_editor_dialog.hpp"
@@ -111,6 +112,7 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 		[this](const QString &id) { move_destination(id, true); });
 	connect(dock, &DestinationsDock::move_down_requested, this,
 		[this](const QString &id) { move_destination(id, false); });
+	connect(dock, &DestinationsDock::move_to_requested, this, &DockController::move_destination_to);
 	connect(dock, &DestinationsDock::color_icons_toggled, this, &DockController::set_color_icons);
 	connect(dock, &DestinationsDock::start_all_requested, this, [this] { engine_.start_all(); });
 	connect(dock, &DestinationsDock::stop_all_requested, this, [this] { engine_.stop_all(); });
@@ -181,14 +183,17 @@ void DockController::move_destination(const QString &id, bool up)
 		return;
 	}
 
-	const auto index = static_cast<long long>(std::distance(config_.destinations.begin(), found));
-	const long long target = index + (up ? -1 : 1);
-	if (target < 0 || static_cast<std::size_t>(target) >= config_.destinations.size()) {
+	const int index = static_cast<int>(std::distance(config_.destinations.begin(), found));
+	// One up lands before the previous row; one down lands before the row after the next.
+	move_destination_to(id, up ? index - 1 : index + 2);
+}
+
+void DockController::move_destination_to(const QString &id, int insert_position)
+{
+	DestinationsConfig updated = config_;
+	if (!move_destination_before(updated.destinations, id.toStdString(), insert_position)) {
 		return;
 	}
-
-	DestinationsConfig updated = config_;
-	std::iter_swap(updated.destinations.begin() + index, updated.destinations.begin() + target);
 
 	const auto error = repository_.save(updated);
 	if (error) {

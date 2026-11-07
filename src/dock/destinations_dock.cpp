@@ -4,13 +4,20 @@
 
 #include <obs-module.h>
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QEvent>
 #include <QFrame>
+#include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLayoutItem>
 #include <QMenu>
+#include <QMimeData>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
@@ -23,6 +30,8 @@ namespace {
 constexpr int kPlatformIconSize = 20;
 constexpr int kDotSize = 10;
 constexpr int kButtonIconSize = 16;
+constexpr int kHandleIconSize = 16;
+constexpr char kDestinationMime[] = "application/x-obs-multi-stream-destination";
 
 QColor tone_color(RowTone tone, const QPalette &palette)
 {
@@ -93,6 +102,12 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	rows_layout_ = new QVBoxLayout(rows_container);
 	rows_layout_->setContentsMargins(0, 0, 0, 0);
 	rows_layout_->addStretch();
+	rows_container_ = rows_container;
+	rows_container_->setAcceptDrops(true);
+	rows_container_->installEventFilter(this);
+	drop_indicator_ = new QFrame(rows_container);
+	drop_indicator_->setStyleSheet("background-color: palette(highlight);");
+	drop_indicator_->hide();
 
 	auto *scroll = new QScrollArea(this);
 	scroll->setWidgetResizable(true);
@@ -127,6 +142,10 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 void DestinationsDock::set_rows(const std::vector<DestinationRowView> &rows)
 {
 	rows_.clear();
+	handle_ids_.clear();
+	pressed_handle_ = nullptr;
+	drop_indicator_->hide();
+	row_count_ = static_cast<int>(rows.size());
 	while (rows_layout_->count() > 1) {
 		// Later, because this can run from a click on a button inside the row.
 		QLayoutItem *item = rows_layout_->takeAt(0);
@@ -166,6 +185,12 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.icon_file = view.icon_file;
 	widgets.brand_color = view.brand_color;
 	widgets.icon = new QLabel(row);
+
+	widgets.handle = new QLabel(row);
+	widgets.handle->setCursor(Qt::OpenHandCursor);
+	widgets.handle->setToolTip(obs_module_text("Dock.DragHint"));
+	widgets.handle->installEventFilter(this);
+	handle_ids_[widgets.handle] = view.id;
 
 	auto *name = new QLabel(view.name, row);
 	name->setTextFormat(Qt::PlainText);
@@ -237,9 +262,14 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	status_line->addWidget(widgets.toggle);
 	status_line->addWidget(widgets.more);
 
-	auto *layout = new QVBoxLayout(row);
-	layout->setContentsMargins(6, 4, 6, 4);
+	auto *outer = new QHBoxLayout(row);
+	outer->setContentsMargins(2, 4, 6, 4);
+	outer->setSpacing(4);
+	outer->addWidget(widgets.handle, 0, Qt::AlignVCenter);
+	auto *layout = new QVBoxLayout();
+	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(2);
+	outer->addLayout(layout, 1);
 	layout->addLayout(title_line);
 	layout->addLayout(status_line);
 	layout->addWidget(widgets.stats);
@@ -285,6 +315,7 @@ void DestinationsDock::apply_row_icons(RowWidgets &widgets)
 					      : palette().color(QPalette::Active, QPalette::WindowText);
 	widgets.icon->setPixmap(colored_pixmap(widgets.icon_file.c_str(), platform_color, kPlatformIconSize, ratio));
 	widgets.dot->setPixmap(status_dot(widgets.tone, palette(), ratio));
+	widgets.handle->setPixmap(themed_pixmap("icons/ui/drag.svg", palette(), kHandleIconSize, ratio));
 	widgets.toggle->setIcon(themed_icon(widgets.stops ? "icons/ui/stop.svg" : "icons/ui/start.svg", palette()));
 	widgets.more->setIcon(themed_icon("icons/ui/more.svg", palette()));
 }
@@ -304,6 +335,128 @@ void DestinationsDock::apply_row_icons_all()
 	for (auto &[id, widgets] : rows_) {
 		apply_row_icons(widgets);
 	}
+}
+
+bool DestinationsDock::eventFilter(QObject *watched, QEvent *event)
+{
+	const auto handle = handle_ids_.find(watched);
+	if (handle != handle_ids_.end()) {
+		auto *mouse = static_cast<QMouseEvent *>(event);
+		switch (event->type()) {
+		case QEvent::MouseButtonPress:
+			if (mouse->button() == Qt::LeftButton) {
+				pressed_handle_ = watched;
+				drag_start_ = mouse->position().toPoint();
+				return true;
+			}
+			break;
+		case QEvent::MouseMove:
+			if (pressed_handle_ == watched && (mouse->buttons() & Qt::LeftButton) &&
+			    (mouse->position().toPoint() - drag_start_).manhattanLength() >=
+				    QApplication::startDragDistance()) {
+				pressed_handle_ = nullptr;
+				const QString id = handle->second;
+				start_drag(static_cast<QWidget *>(watched), id);
+				return true;
+			}
+			break;
+		case QEvent::MouseButtonRelease:
+			pressed_handle_ = nullptr;
+			break;
+		default:
+			break;
+		}
+		return QWidget::eventFilter(watched, event);
+	}
+
+	if (watched == rows_container_) {
+		switch (event->type()) {
+		case QEvent::DragEnter:
+		case QEvent::DragMove: {
+			auto *drag = static_cast<QDragMoveEvent *>(event);
+			if (!drag->mimeData()->hasFormat(kDestinationMime)) {
+				return false;
+			}
+			drag->acceptProposedAction();
+			show_drop_indicator(drop_position(drag->position().toPoint().y()));
+			return true;
+		}
+		case QEvent::DragLeave:
+			drop_indicator_->hide();
+			return true;
+		case QEvent::Drop: {
+			auto *drop = static_cast<QDropEvent *>(event);
+			drop_indicator_->hide();
+			if (!drop->mimeData()->hasFormat(kDestinationMime)) {
+				return false;
+			}
+			pending_move_ = std::make_pair(QString::fromUtf8(drop->mimeData()->data(kDestinationMime)),
+						       drop_position(drop->position().toPoint().y()));
+			drop->acceptProposedAction();
+			return true;
+		}
+		default:
+			break;
+		}
+	}
+	return QWidget::eventFilter(watched, event);
+}
+
+void DestinationsDock::start_drag(QWidget *handle, const QString &id)
+{
+	QWidget *row = handle->parentWidget();
+
+	auto *mime = new QMimeData();
+	mime->setData(kDestinationMime, id.toUtf8());
+	auto *drag = new QDrag(handle);
+	drag->setMimeData(mime);
+	drag->setPixmap(row->grab());
+	drag->setHotSpot(handle->mapTo(row, drag_start_));
+
+	// Dim the row being moved while it is dragged.
+	auto *dim = new QGraphicsOpacityEffect(row);
+	dim->setOpacity(0.4);
+	row->setGraphicsEffect(dim);
+
+	pending_move_.reset();
+	drag->exec(Qt::MoveAction);
+
+	row->setGraphicsEffect(nullptr);
+	drop_indicator_->hide();
+
+	// Emitting rebuilds the rows; doing it here, after the drag loop, keeps the handle
+	// that owns this drag alive until the rebuild's deferred deletes run.
+	if (pending_move_) {
+		const auto [moved_id, position] = *pending_move_;
+		pending_move_.reset();
+		emit move_to_requested(moved_id, position);
+	}
+}
+
+int DestinationsDock::drop_position(int y) const
+{
+	for (int index = 0; index < row_count_; ++index) {
+		const QWidget *row = rows_layout_->itemAt(index)->widget();
+		if (y < row->geometry().center().y()) {
+			return index;
+		}
+	}
+	return row_count_;
+}
+
+void DestinationsDock::show_drop_indicator(int position)
+{
+	if (row_count_ == 0) {
+		drop_indicator_->hide();
+		return;
+	}
+	const int half_gap = rows_layout_->spacing() / 2;
+	const int y = position < row_count_
+			      ? rows_layout_->itemAt(position)->widget()->geometry().top() - half_gap
+			      : rows_layout_->itemAt(row_count_ - 1)->widget()->geometry().bottom() + half_gap;
+	drop_indicator_->setGeometry(0, qMax(0, y - 1), rows_container_->width(), 2);
+	drop_indicator_->raise();
+	drop_indicator_->show();
 }
 
 void DestinationsDock::changeEvent(QEvent *event)
