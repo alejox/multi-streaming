@@ -2,19 +2,38 @@
 // are saved by OBS in the scene collection; the resolution and the program scene are not.
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace multistream {
 
-struct VerticalSettings {
-	int width = 1080;
-	int height = 1920;
+// The scenes belong to a scene collection, so what the plugin remembers about them does too.
+struct VerticalSceneState {
 	std::string active_scene;
 	// libobs has no order for a canvas's scenes, so this list is the only record of it.
 	std::vector<std::string> scene_order;
 };
+
+struct VerticalSettings {
+	// Shared by every scene collection.
+	int width = 1080;
+	int height = 1920;
+	// The scene state of the collection in use.
+	std::string active_scene;
+	std::vector<std::string> scene_order;
+	// The scene state of every collection seen, by collection name.
+	std::map<std::string, VerticalSceneState> collections;
+};
+
+// The settings with the scene state of the named collection in use, recorded under it. A
+// file from before collections were tracked has its scene state taken by the first
+// collection; once any collection is known, an unknown one starts empty.
+VerticalSettings select_collection(VerticalSettings settings, const std::string &collection);
+
+// Records the scene state in use under the named collection. An empty name records nothing.
+void remember_collection(VerticalSettings &settings, const std::string &collection);
 
 // Even sizes are what the 4:2:0 encoders need; 8192 is a practical upper limit.
 bool is_valid_vertical_resolution(int width, int height);

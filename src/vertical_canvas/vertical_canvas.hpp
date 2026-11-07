@@ -178,6 +178,8 @@ private:
 
 	std::filesystem::path settings_path_;
 	VerticalSettings settings_;
+	// The scene collection the scene state in settings_ belongs to; empty before attach().
+	std::string collection_;
 	OBSCanvas canvas_;
 	std::shared_ptr<VerticalPreviewTarget> preview_ = std::make_shared<VerticalPreviewTarget>();
 	std::function<void()> listener_;

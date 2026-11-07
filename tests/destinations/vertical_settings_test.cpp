@@ -175,3 +175,74 @@ TEST_CASE(moving_a_scene_past_the_ends_or_unknown_changes_nothing)
 	CHECK(multistream::move_scene(scenes, "B", false) == scenes);
 	CHECK(multistream::move_scene(scenes, "Z", true) == scenes);
 }
+
+TEST_CASE(legacy_scene_fields_migrate_into_the_first_collection_loaded)
+{
+	const auto legacy = decode_vertical_settings(
+		R"({"width":720,"height":1280,"active_scene":"Game","scene_order":["Game","Chat"]})");
+	REQUIRE(legacy.has_value());
+
+	const VerticalSettings selected = select_collection(*legacy, "Main");
+	CHECK_EQ(selected.width, 720);
+	CHECK_EQ(selected.active_scene, std::string("Game"));
+	CHECK(selected.scene_order == (std::vector<std::string>{"Game", "Chat"}));
+	REQUIRE(selected.collections.count("Main") == 1);
+	CHECK_EQ(selected.collections.at("Main").active_scene, std::string("Game"));
+}
+
+TEST_CASE(a_collection_never_seen_starts_without_scene_state_once_others_are_known)
+{
+	VerticalSettings stored = select_collection(VerticalSettings{}, "Main");
+	stored.active_scene = "Game";
+	stored.scene_order = {"Game", "Chat"};
+	remember_collection(stored, "Main");
+
+	const VerticalSettings other = select_collection(stored, "Other");
+	CHECK(other.active_scene.empty());
+	CHECK(other.scene_order.empty());
+	CHECK_EQ(other.collections.at("Main").active_scene, std::string("Game"));
+}
+
+TEST_CASE(each_collection_keeps_its_own_scene_state_and_the_resolution_is_shared)
+{
+	VerticalSettings settings = select_collection(VerticalSettings{}, "Main");
+	settings.active_scene = "Game";
+	settings.scene_order = {"Game", "Chat"};
+	remember_collection(settings, "Main");
+
+	settings = select_collection(settings, "Other");
+	settings.active_scene = "Talk";
+	settings.width = 720;
+	settings.height = 1280;
+	remember_collection(settings, "Other");
+
+	const auto decoded = decode_vertical_settings(encode_vertical_settings(settings));
+	REQUIRE(decoded.has_value());
+
+	const VerticalSettings main = select_collection(*decoded, "Main");
+	CHECK_EQ(main.active_scene, std::string("Game"));
+	CHECK(main.scene_order == (std::vector<std::string>{"Game", "Chat"}));
+	CHECK_EQ(main.width, 720);
+
+	const VerticalSettings other = select_collection(*decoded, "Other");
+	CHECK_EQ(other.active_scene, std::string("Talk"));
+	CHECK(other.scene_order.empty());
+}
+
+TEST_CASE(an_unnamed_collection_is_not_remembered)
+{
+	VerticalSettings settings;
+	settings.active_scene = "Game";
+	remember_collection(settings, "");
+	CHECK(settings.collections.empty());
+}
+
+TEST_CASE(malformed_collection_entries_are_skipped)
+{
+	const auto decoded = decode_vertical_settings(
+		R"({"collections":{"Main":{"active_scene":"Game","scene_order":["Game",4]},"Bad":3}})");
+	REQUIRE(decoded.has_value());
+	CHECK(decoded->collections.count("Bad") == 0);
+	REQUIRE(decoded->collections.count("Main") == 1);
+	CHECK(decoded->collections.at("Main").scene_order == (std::vector<std::string>{"Game"}));
+}

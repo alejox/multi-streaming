@@ -17,6 +17,26 @@ int resolution_field(const json &document, const char *name, int fallback)
 	return found != document.end() && found->is_number_integer() ? found->get<int>() : fallback;
 }
 
+std::vector<std::string> string_list(const json &document, const char *name)
+{
+	std::vector<std::string> result;
+	const auto list = document.find(name);
+	if (list != document.end() && list->is_array()) {
+		for (const json &item : *list) {
+			if (item.is_string()) {
+				result.push_back(item.get<std::string>());
+			}
+		}
+	}
+	return result;
+}
+
+std::string string_field(const json &document, const char *name)
+{
+	const auto found = document.find(name);
+	return found != document.end() && found->is_string() ? found->get<std::string>() : std::string();
+}
+
 } // namespace
 
 bool is_valid_vertical_resolution(int width, int height)
@@ -40,11 +60,17 @@ ResolutionChange decide_resolution_change(const VerticalSettings &current, int w
 
 std::string encode_vertical_settings(const VerticalSettings &settings)
 {
+	json collections = json::object();
+	for (const auto &[name, state] : settings.collections) {
+		collections[name] = {{"active_scene", state.active_scene}, {"scene_order", state.scene_order}};
+	}
+	// The top-level scene fields keep the file readable by versions without collections.
 	const json document = {
 		{"width", settings.width},
 		{"height", settings.height},
 		{"active_scene", settings.active_scene},
 		{"scene_order", settings.scene_order},
+		{"collections", collections},
 	};
 	return document.dump(2);
 }
@@ -64,20 +90,40 @@ std::optional<VerticalSettings> decode_vertical_settings(const std::string &text
 		settings.height = height;
 	}
 
-	const auto scene = document.find("active_scene");
-	if (scene != document.end() && scene->is_string()) {
-		settings.active_scene = scene->get<std::string>();
-	}
+	settings.active_scene = string_field(document, "active_scene");
+	settings.scene_order = string_list(document, "scene_order");
 
-	const auto order = document.find("scene_order");
-	if (order != document.end() && order->is_array()) {
-		for (const json &name : *order) {
-			if (name.is_string()) {
-				settings.scene_order.push_back(name.get<std::string>());
+	const auto collections = document.find("collections");
+	if (collections != document.end() && collections->is_object()) {
+		for (const auto &[name, entry] : collections->items()) {
+			if (entry.is_object()) {
+				settings.collections[name] = {string_field(entry, "active_scene"),
+							      string_list(entry, "scene_order")};
 			}
 		}
 	}
 	return settings;
+}
+
+VerticalSettings select_collection(VerticalSettings settings, const std::string &collection)
+{
+	const auto known = settings.collections.find(collection);
+	if (known != settings.collections.end()) {
+		settings.active_scene = known->second.active_scene;
+		settings.scene_order = known->second.scene_order;
+	} else if (!settings.collections.empty()) {
+		settings.active_scene.clear();
+		settings.scene_order.clear();
+	}
+	remember_collection(settings, collection);
+	return settings;
+}
+
+void remember_collection(VerticalSettings &settings, const std::string &collection)
+{
+	if (!collection.empty()) {
+		settings.collections[collection] = {settings.active_scene, settings.scene_order};
+	}
 }
 
 std::optional<std::string> pick_active_scene(const std::vector<std::string> &scenes, const std::string &wanted)

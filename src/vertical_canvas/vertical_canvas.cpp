@@ -364,6 +364,12 @@ bool VerticalCanvas::attach()
 		return true;
 	}
 
+	// The scenes, and so what is remembered about them, belong to the collection loaded now.
+	char *collection = obs_frontend_get_current_scene_collection();
+	collection_ = collection ? collection : "";
+	bfree(collection);
+	settings_ = select_collection(load_vertical_settings(settings_path_), collection_);
+
 	if (!is_canvas_api_tested(obs_get_version())) {
 		obs_log(LOG_WARNING, "the Canvas API was not tested on OBS %s: the vertical canvas is disabled",
 			obs_get_version_string());
@@ -923,6 +929,7 @@ bool VerticalCanvas::reset_video()
 
 void VerticalCanvas::persist()
 {
+	remember_collection(settings_, collection_);
 	if (const auto problem = save_vertical_settings(settings_path_, settings_)) {
 		obs_log(LOG_WARNING, "%s", problem->c_str());
 	}
