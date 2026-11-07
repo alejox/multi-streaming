@@ -35,8 +35,8 @@ colors, flat editor form, untranslated validation messages, unsafe destructive a
 ## Tasks
 
 - [x] T1 Preview: push native child geometry (`windowHandle()->setGeometry`) on ancestor move/resize/screen change, then off-by-one resize; drop display recreation hacks. Route: inline (one file, cause understood).
-- [ ] T2 Main-stream lifecycle: start follow-main destinations on `STREAMING_STARTED`; stop vertical outputs on `CANVAS_REMOVED`; handle core `video_reset` for the vertical canvas. Route: delegated writer (2+ files).
-- [ ] T3 Encoder sharing: share main encoders only with follow-main destinations (lifetimes match); copy encoders honor main rescale. Route: delegated writer (core + tests).
+- [x] T2 Main-stream lifecycle: start follow-main destinations on `STREAMING_STARTED`; stop vertical outputs on `CANVAS_REMOVED`; handle core `video_reset` for the vertical canvas. Route: delegated writer (2+ files).
+- [x] T3 Encoder sharing: share main encoders only with follow-main destinations (lifetimes match); copy encoders honor main rescale. Route: delegated writer (core + tests).
 - [ ] T4 Twitch OAuth robustness: free sockets, match redirect path, login timeout, store refresh token only on Save. Route: delegated writer.
 - [ ] T5 Localize core/validation/persistence messages via codes + locale keys. Route: delegated writer.
 - [ ] T6 Theme-aware styling: OBS `class` properties for status/notice/tool buttons, no hard-coded colors, native toolbar icons, empty state, notice banner. Route: delegated writer.
@@ -59,8 +59,10 @@ colors, flat editor form, untranslated validation messages, unsafe destructive a
 (updated per task with commit ids and observed check results)
 
 - T1: commit 355ac32. macOS build OK; installed + codesign OK. Root cause: Qt setGeometry_sys only moves a native child when its own geometry changes (qtbase qwidget.cpp L7314-7420). Pending: user check across monitors.
+- T2: commits feabc65 (vertical canvas follows core `video_reset`, queued on the UI thread; `removed()`), 15496d7 (follow-main destinations start on `STREAMING_STARTED`; vertical outputs stop before detaching a removed canvas). Each commit builds on its own (macOS build checked at 15496d7). Pending: user check in OBS (start main with a follow-main destination; change Settings > Video FPS with the vertical canvas attached).
+- T3: commit 90b68a1. Test-first: 2 new `encoder_plan_test` cases RED (`a_destination_that_does_not_follow_main_never_holds_its_encoders`, `a_follower_and_an_independent_destination_never_share_an_encoder_key`), then GREEN. Reused main encoders get their own keys (`video-obs-main`, `audio-obs-main-track-N`). Share copies on the main mix copy main's scaled size and GPU scale type (`obs_encoder_get_scale_type` is the libobs 33 getter). Checks: core tests 32/32 passed; macOS RelWithDebInfo build succeeded.
 - Engram mirror `odd/premium-polish/tasks`: PENDING (auto-mode classifier blocked mem_save; resync when available).
 
 ## Next step
 
-T2+T3 (delegated writer).
+T4 (delegated writer).
