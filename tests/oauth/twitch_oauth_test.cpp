@@ -76,3 +76,27 @@ TEST_CASE(token_response_survives_non_json)
 	CHECK(!response.ok());
 	CHECK_EQ(response.error.value_or(""), "invalid_response");
 }
+
+TEST_CASE(redirect_uri_path_is_the_path_of_the_uri)
+{
+	CHECK_EQ(redirect_uri_path("http://localhost:8090/"), "/");
+	CHECK_EQ(redirect_uri_path("http://localhost:8090/callback?x=1"), "/callback");
+	CHECK_EQ(redirect_uri_path("http://localhost:8090"), "/");
+}
+
+TEST_CASE(redirect_request_on_the_redirect_path_yields_its_query)
+{
+	CHECK_EQ(redirect_request_query("GET /?code=abc&state=xyz HTTP/1.1", "/").value_or("<none>"),
+		 "code=abc&state=xyz");
+	CHECK_EQ(redirect_request_query("GET /callback HTTP/1.1", "/callback").value_or("<none>"), "");
+}
+
+TEST_CASE(other_requests_do_not_complete_the_redirect)
+{
+	CHECK(!redirect_request_query("GET /favicon.ico HTTP/1.1", "/"));
+	CHECK(!redirect_request_query("GET /callbackx?code=abc HTTP/1.1", "/callback"));
+	CHECK(!redirect_request_query("POST /?code=abc HTTP/1.1", "/"));
+	CHECK(!redirect_request_query("GET /", "/"));
+	CHECK(!redirect_request_query("", "/"));
+	CHECK(!redirect_request_query("garbage", "/"));
+}

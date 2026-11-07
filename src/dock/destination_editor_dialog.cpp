@@ -7,6 +7,7 @@
 #include "oauth/twitch_token_store.hpp"
 
 #include <obs-module.h>
+#include <plugin-support.h>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -225,6 +226,13 @@ void DestinationEditorDialog::accept()
 		show_error(save_error_, *failure);
 		return;
 	}
+	if (pending_refresh_token_ && secrets_) {
+		TwitchTokenStore token_store(*secrets_);
+		if (token_store.put(initial_.id, *pending_refresh_token_)) {
+			obs_log(LOG_WARNING, "could not store the Twitch refresh token; the next connect opens the browser");
+		}
+		pending_refresh_token_.reset();
+	}
 	QDialog::accept();
 }
 
@@ -326,10 +334,16 @@ void DestinationEditorDialog::connect_twitch()
 		return;
 	}
 
-	TwitchTokenStore token_store(*secrets_);
-	const SecretLookup stored = token_store.get(initial_.id);
-	const std::optional<std::string> refresh_token =
-		(stored.secret && !stored.secret->empty()) ? stored.secret : std::nullopt;
+	// A token from an earlier connect in this dialog is newer than the stored one: Twitch
+	// rotates refresh tokens on use.
+	std::optional<std::string> refresh_token = pending_refresh_token_;
+	if (!refresh_token) {
+		TwitchTokenStore token_store(*secrets_);
+		const SecretLookup stored = token_store.get(initial_.id);
+		if (stored.secret && !stored.secret->empty()) {
+			refresh_token = stored.secret;
+		}
+	}
 
 	flow_ = new TwitchConnectFlow(std::string(kTwitchClientId), twitch_redirect_uris(), this);
 	connect(flow_, &TwitchConnectFlow::succeeded, this, &DestinationEditorDialog::on_connect_succeeded);
@@ -343,13 +357,11 @@ void DestinationEditorDialog::connect_twitch()
 void DestinationEditorDialog::on_connect_succeeded(const QString &stream_key, const QString &channel_login,
 						   const QString &refresh_token)
 {
-	blog(LOG_INFO, "[obs-multi-stream] Twitch connect succeeded as %s", channel_login.toUtf8().constData());
+	obs_log(LOG_INFO, "Twitch connect succeeded as %s", channel_login.toUtf8().constData());
 	cleanup_flow();
 	key_->setText(stream_key);
-
-	if (secrets_) {
-		TwitchTokenStore token_store(*secrets_);
-		token_store.put(initial_.id, refresh_token.toStdString());
+	if (!refresh_token.isEmpty()) {
+		pending_refresh_token_ = refresh_token.toStdString();
 	}
 
 	show_connect_status(QString::fromUtf8(obs_module_text("Editor.ConnectTwitchDone")).arg(channel_login));
@@ -357,7 +369,7 @@ void DestinationEditorDialog::on_connect_succeeded(const QString &stream_key, co
 
 void DestinationEditorDialog::on_connect_failed(const QString &message)
 {
-	blog(LOG_WARNING, "[obs-multi-stream] Twitch connect failed: %s", message.toUtf8().constData());
+	obs_log(LOG_WARNING, "Twitch connect failed: %s", message.toUtf8().constData());
 	cleanup_flow();
 	show_connect_status(message);
 }

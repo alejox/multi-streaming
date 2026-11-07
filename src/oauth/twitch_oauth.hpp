@@ -28,6 +28,14 @@ struct TwitchRedirect {
 };
 TwitchRedirect parse_redirect_query(std::string_view query);
 
+// The path of a redirect URI ("http://localhost:8090/cb?x" -> "/cb"), or "/" when it has none.
+std::string redirect_uri_path(std::string_view redirect_uri);
+
+// For an HTTP request line ("GET /path?query HTTP/1.1"), the query (possibly empty) when it
+// is a GET for exactly `expected_path`; nullopt for any other path, method, or a malformed
+// line, so that favicon requests and browser preconnects never complete the login.
+std::optional<std::string> redirect_request_query(std::string_view request_line, std::string_view expected_path);
+
 // application/x-www-form-urlencoded bodies for POST /oauth2/token.
 std::string token_exchange_body(std::string_view client_id, std::string_view code, std::string_view redirect_uri,
 				std::string_view code_verifier);

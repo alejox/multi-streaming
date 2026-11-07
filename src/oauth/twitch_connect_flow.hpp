@@ -17,6 +17,7 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QTcpServer;
 class QTcpSocket;
+class QTimer;
 
 namespace multistream {
 
@@ -41,7 +42,11 @@ private:
 	void start_browser_flow();
 	void refresh_with_token(std::string_view refresh_token);
 	void handle_connection(QTcpSocket *socket);
-	void answer(QTcpSocket *socket, const QString &body);
+	void handle_request_line(QTcpSocket *socket, const QByteArray &request_line);
+	void answer(QTcpSocket *socket, const char *status, const QString &body);
+	void stop_listening();
+	void fail(const QString &message);
+	void succeed(const QString &stream_key);
 	void handle_redirect_query(std::string_view query);
 	void exchange_code(std::string_view code);
 	void fetch_user_and_key();
@@ -53,6 +58,7 @@ private:
 	std::string client_id_;
 	std::vector<std::string> redirect_uris_;
 	std::string active_redirect_uri_;
+	std::string active_redirect_path_;
 
 	std::string state_;
 	std::string code_verifier_;
@@ -62,7 +68,8 @@ private:
 
 	QNetworkAccessManager *network_ = nullptr;
 	QTcpServer *listener_ = nullptr;
-	QByteArray pending_request_;
+	QTimer *login_timeout_ = nullptr;
+	bool finished_ = false;
 };
 
 } // namespace multistream

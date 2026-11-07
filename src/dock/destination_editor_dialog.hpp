@@ -74,6 +74,9 @@ private:
 	QPushButton *connect_twitch_ = nullptr;
 	QLabel *connect_status_ = nullptr;
 	TwitchConnectFlow *flow_ = nullptr;
+	// The refresh token from the last successful Twitch connect. It is only written to
+	// the secret store when the dialog saves, so Cancel never leaves an orphaned token.
+	std::optional<std::string> pending_refresh_token_;
 	QComboBox *video_source_ = nullptr;
 	QComboBox *encoder_mode_ = nullptr;
 	QComboBox *encoder_id_ = nullptr;

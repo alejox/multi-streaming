@@ -5,6 +5,7 @@
 #include "oauth/twitch_oauth.hpp"
 
 #include <obs-module.h>
+#include <plugin-support.h>
 
 #include <QDesktopServices>
 #include <QHostAddress>
@@ -13,14 +14,22 @@
 #include <QNetworkRequest>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QUrl>
 
+#include <chrono>
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace multistream {
 
 namespace {
+
+// How long the browser login may take before the flow gives up and frees its port.
+constexpr std::chrono::minutes kLoginTimeout{5};
+// A request line longer than this is not the redirect; drop the connection.
+constexpr qsizetype kMaxRequestHeadBytes = 16 * 1024;
 
 QString module_text(const char *key)
 {
@@ -58,6 +67,7 @@ bool TwitchConnectFlow::bind_listener()
 		if (candidate->listen(QHostAddress::LocalHost, port)) {
 			listener_ = candidate;
 			active_redirect_uri_ = uri;
+			active_redirect_path_ = redirect_uri_path(uri);
 			connect(listener_, &QTcpServer::newConnection, this,
 				[this] { handle_connection(listener_->nextPendingConnection()); });
 			return true;
@@ -72,16 +82,50 @@ void TwitchConnectFlow::start_browser_flow()
 	code_verifier_ = generate_code_verifier();
 
 	if (!bind_listener()) {
-		emit failed(module_text("Twitch.ListenerFailed"));
+		fail(module_text("Twitch.ListenerFailed"));
 		return;
 	}
+
+	login_timeout_ = new QTimer(this);
+	login_timeout_->setSingleShot(true);
+	connect(login_timeout_, &QTimer::timeout, this, [this] { fail(module_text("Twitch.Timeout")); });
+	login_timeout_->start(kLoginTimeout);
 
 	const std::string challenge = code_challenge(code_verifier_);
 	const std::string url = twitch_authorize_url(client_id_, active_redirect_uri_, state_, challenge);
 	if (!QDesktopServices::openUrl(QUrl(QString::fromStdString(url)))) {
-		listener_->close();
-		emit failed(module_text("Twitch.BrowserFailed"));
+		fail(module_text("Twitch.BrowserFailed"));
 	}
+}
+
+void TwitchConnectFlow::stop_listening()
+{
+	if (login_timeout_) {
+		login_timeout_->stop();
+	}
+	if (listener_) {
+		listener_->close();
+	}
+}
+
+void TwitchConnectFlow::fail(const QString &message)
+{
+	if (finished_) {
+		return;
+	}
+	finished_ = true;
+	stop_listening();
+	emit failed(message);
+}
+
+void TwitchConnectFlow::succeed(const QString &stream_key)
+{
+	if (finished_) {
+		return;
+	}
+	finished_ = true;
+	stop_listening();
+	emit succeeded(stream_key, QString::fromStdString(channel_login_), QString::fromStdString(refresh_token_));
 }
 
 void TwitchConnectFlow::refresh_with_token(std::string_view refresh_token)
@@ -90,7 +134,7 @@ void TwitchConnectFlow::refresh_with_token(std::string_view refresh_token)
 	const std::string body = token_refresh_body(client_id_, refresh_token_);
 	post_form(kTwitchTokenEndpoint, body, [this](std::optional<std::string> response) {
 		if (!response) {
-			emit failed(module_text("Twitch.Unreachable"));
+			fail(module_text("Twitch.Unreachable"));
 			return;
 		}
 		const TwitchTokenResponse tokens = parse_token_response(*response);
@@ -108,37 +152,51 @@ void TwitchConnectFlow::refresh_with_token(std::string_view refresh_token)
 
 void TwitchConnectFlow::handle_connection(QTcpSocket *socket)
 {
-	connect(socket, &QTcpSocket::readyRead, this, [this, socket] {
-		pending_request_ += socket->readAll();
-		const qsizetype line_end = pending_request_.indexOf("\r\n");
+	if (!socket) {
+		return;
+	}
+	// Browsers also open speculative connections that never send a request, and ask for
+	// /favicon.ico; each socket keeps its own buffer and frees itself once closed.
+	connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+	auto buffer = std::make_shared<QByteArray>();
+	connect(socket, &QTcpSocket::readyRead, this, [this, socket, buffer] {
+		*buffer += socket->readAll();
+		const qsizetype line_end = buffer->indexOf("\r\n");
 		if (line_end < 0) {
+			if (buffer->size() > kMaxRequestHeadBytes) {
+				socket->abort();
+				socket->deleteLater();
+			}
 			return;
 		}
-		const QByteArray request_line = pending_request_.left(line_end);
-		pending_request_.clear();
-
-		const qsizetype first_space = request_line.indexOf(' ');
-		const qsizetype second_space = request_line.indexOf(' ', first_space + 1);
-		if (first_space < 0 || second_space < 0) {
-			answer(socket, QStringLiteral("<h1>%1</h1>").arg(module_text("Twitch.PageBadRequest").toHtmlEscaped()));
-			return;
-		}
-		const QByteArray target = request_line.mid(first_space + 1, second_space - first_space - 1);
-		const qsizetype question = target.indexOf('?');
-		const std::string query = question >= 0 ? std::string(target.constData() + question + 1,
-								     target.size() - question - 1)
-						       : std::string();
-
-		listener_->close();
-		answer(socket, QStringLiteral("<h1>%1</h1>").arg(module_text("Twitch.PageDone").toHtmlEscaped()));
-		handle_redirect_query(query);
+		const QByteArray request_line = buffer->left(line_end);
+		buffer->clear();
+		handle_request_line(socket, request_line);
 	});
 }
 
-void TwitchConnectFlow::answer(QTcpSocket *socket, const QString &body)
+void TwitchConnectFlow::handle_request_line(QTcpSocket *socket, const QByteArray &request_line)
+{
+	const std::optional<std::string> query = redirect_request_query(
+		std::string_view(request_line.constData(), static_cast<std::size_t>(request_line.size())),
+		active_redirect_path_);
+	if (!query || finished_) {
+		answer(socket, "404 Not Found",
+		       QStringLiteral("<h1>%1</h1>").arg(module_text("Twitch.PageBadRequest").toHtmlEscaped()));
+		return;
+	}
+
+	stop_listening();
+	answer(socket, "200 OK", QStringLiteral("<h1>%1</h1>").arg(module_text("Twitch.PageDone").toHtmlEscaped()));
+	handle_redirect_query(*query);
+}
+
+void TwitchConnectFlow::answer(QTcpSocket *socket, const char *status, const QString &body)
 {
 	const QByteArray utf8 = body.toUtf8();
-	QByteArray response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ";
+	QByteArray response = "HTTP/1.1 ";
+	response += status;
+	response += "\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ";
 	response += QByteArray::number(utf8.size());
 	response += "\r\nConnection: close\r\n\r\n";
 	response += utf8;
@@ -152,15 +210,15 @@ void TwitchConnectFlow::handle_redirect_query(std::string_view query)
 	if (redirect.error) {
 		const std::string detail =
 			redirect.error_description.value_or(redirect.error.value_or(obs_module_text("Twitch.Denied")));
-		emit failed(QString::fromStdString(detail));
+		fail(QString::fromStdString(detail));
 		return;
 	}
 	if (!redirect.state || *redirect.state != state_) {
-		emit failed(module_text("Twitch.StateMismatch"));
+		fail(module_text("Twitch.StateMismatch"));
 		return;
 	}
 	if (!redirect.code) {
-		emit failed(module_text("Twitch.NoCode"));
+		fail(module_text("Twitch.NoCode"));
 		return;
 	}
 	exchange_code(*redirect.code);
@@ -171,14 +229,14 @@ void TwitchConnectFlow::exchange_code(std::string_view code)
 	const std::string body = token_exchange_body(client_id_, code, active_redirect_uri_, code_verifier_);
 	post_form(kTwitchTokenEndpoint, body, [this](std::optional<std::string> response) {
 		if (!response) {
-			emit failed(module_text("Twitch.Unreachable"));
+			fail(module_text("Twitch.Unreachable"));
 			return;
 		}
 		const TwitchTokenResponse tokens = parse_token_response(*response);
 		if (!tokens.ok()) {
 			const std::string detail =
 				tokens.error_description.value_or(tokens.error.value_or(obs_module_text("Twitch.AuthFailed")));
-			emit failed(QString::fromStdString(detail));
+			fail(QString::fromStdString(detail));
 			return;
 		}
 		access_token_ = tokens.access_token.value_or("");
@@ -191,27 +249,26 @@ void TwitchConnectFlow::fetch_user_and_key()
 {
 	get_json(helix_users_url(), access_token_, [this](std::optional<std::string> response) {
 		if (!response) {
-			emit failed(module_text("Twitch.Unreachable"));
+			fail(module_text("Twitch.Unreachable"));
 			return;
 		}
 		const std::optional<TwitchUser> user = parse_helix_users(*response);
 		if (!user) {
-			emit failed(module_text("Twitch.NoAccount"));
+			fail(module_text("Twitch.NoAccount"));
 			return;
 		}
 		channel_login_ = user->login;
 		get_json(helix_stream_key_url(user->id), access_token_, [this](std::optional<std::string> key_response) {
 			if (!key_response) {
-				emit failed(module_text("Twitch.Unreachable"));
+				fail(module_text("Twitch.Unreachable"));
 				return;
 			}
 			const std::optional<std::string> key = parse_helix_stream_key(*key_response);
 			if (!key) {
-				emit failed(module_text("Twitch.NoStreamKey"));
+				fail(module_text("Twitch.NoStreamKey"));
 				return;
 			}
-			emit succeeded(QString::fromStdString(*key), QString::fromStdString(channel_login_),
-				       QString::fromStdString(refresh_token_));
+			succeed(QString::fromStdString(*key));
 		});
 	});
 }

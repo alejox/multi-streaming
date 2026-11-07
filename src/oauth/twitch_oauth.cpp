@@ -136,6 +136,36 @@ TwitchRedirect parse_redirect_query(std::string_view query)
 	return redirect;
 }
 
+std::string redirect_uri_path(std::string_view redirect_uri)
+{
+	std::size_t authority = redirect_uri.find("://");
+	authority = authority == std::string_view::npos ? 0 : authority + 3;
+	const std::size_t path_start = redirect_uri.find('/', authority);
+	if (path_start == std::string_view::npos) {
+		return "/";
+	}
+	const std::string_view rest = redirect_uri.substr(path_start);
+	return std::string(rest.substr(0, rest.find_first_of("?#")));
+}
+
+std::optional<std::string> redirect_request_query(std::string_view request_line, std::string_view expected_path)
+{
+	const std::size_t first_space = request_line.find(' ');
+	if (first_space == std::string_view::npos || request_line.substr(0, first_space) != "GET") {
+		return std::nullopt;
+	}
+	const std::size_t second_space = request_line.find(' ', first_space + 1);
+	if (second_space == std::string_view::npos) {
+		return std::nullopt;
+	}
+	const std::string_view target = request_line.substr(first_space + 1, second_space - first_space - 1);
+	const std::size_t question = target.find('?');
+	if (target.substr(0, question) != expected_path) {
+		return std::nullopt;
+	}
+	return question == std::string_view::npos ? std::string() : std::string(target.substr(question + 1));
+}
+
 std::string token_exchange_body(std::string_view client_id, std::string_view code, std::string_view redirect_uri,
 				std::string_view code_verifier)
 {
