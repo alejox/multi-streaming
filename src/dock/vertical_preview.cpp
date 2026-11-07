@@ -30,6 +30,8 @@ constexpr int kOverlayIntervalMilliseconds = 33;
 constexpr int kRetiredDisplayPurgeMilliseconds = 5000;
 // How long the window must stay still after a screen change before the display is remade.
 constexpr int kRecreateSettleMilliseconds = 300;
+// Long enough for the graphics thread to render a frame at the off-by-one size.
+constexpr int kSurfaceRefreshMilliseconds = 100;
 
 std::optional<NudgeDirection> nudge_direction(int key)
 {
@@ -175,20 +177,39 @@ void VerticalPreview::recreate_display()
 	if (!forced && display_ && in_window == display_position_) {
 		return;
 	}
-	// On macOS the OpenGL swapchain re-attaches its surface to the view only when its pixel
-	// size changes. A move to another screen, or a move inside the window at the same size
-	// (a wider window shifting the docks), leaves the view blank or the picture floating
-	// where the view used to be. A fresh display, made once the window has settled,
-	// attaches to the view where it is now.
+	if (!display_) {
+		create_display();
+		return;
+	}
+	// On macOS the OpenGL swapchain re-attaches its surface to the view (NSOpenGLContext
+	// update, queued by gl_update) only when its pixel size changes. A move to another
+	// screen, or a move inside the window at the same size (a wider window shifting the
+	// docks), leaves the picture floating where the view used to be; a new display does
+	// not help, as its first frame already has the right size. So do what a manual resize
+	// does: render one size off by a pixel, then the real size once that frame is out.
 	const QSize pixels = pixel_size();
 	const QScreen *current = screen();
 	blog(LOG_INFO,
-	     "[obs-multi-stream] vertical preview %s, recreating its display at %dx%d px, at %d,%d in its window, "
+	     "[obs-multi-stream] vertical preview %s, refreshing its surface at %dx%d px, at %d,%d in its window, "
 	     "on screen '%s' (ratio %.2f)",
 	     recreate_reason_, pixels.width(), pixels.height(), in_window.x(), in_window.y(),
 	     current != nullptr ? current->name().toUtf8().constData() : "?", devicePixelRatioF());
-	release();
-	create_display();
+	if (pixels.isEmpty()) {
+		return;
+	}
+	display_position_ = in_window;
+	obs_display_resize(display_, static_cast<uint32_t>(pixels.width()),
+			   static_cast<uint32_t>(pixels.height() > 1 ? pixels.height() - 1 : pixels.height() + 1));
+	QTimer::singleShot(kSurfaceRefreshMilliseconds, this, [this] {
+		if (!display_) {
+			return;
+		}
+		const QSize now = pixel_size();
+		if (!now.isEmpty()) {
+			obs_display_resize(display_, static_cast<uint32_t>(now.width()),
+					   static_cast<uint32_t>(now.height()));
+		}
+	});
 }
 
 void VerticalPreview::watch_top_level()
