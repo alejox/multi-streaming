@@ -28,8 +28,8 @@ constexpr double kDragThreshold = 2.0;
 constexpr int kOverlayIntervalMilliseconds = 33;
 // Long past any swapchain update a retired display queued on the main thread.
 constexpr int kRetiredDisplayPurgeMilliseconds = 5000;
-// How long the window must stay still after a screen change before the display is remade.
-constexpr int kRecreateSettleMilliseconds = 300;
+// Lets a burst of layout moves (a window drag, a dock rearrangement) settle into one sync.
+constexpr int kSurfaceSyncMilliseconds = 50;
 // Long enough for the graphics thread to render a frame at the off-by-one size.
 constexpr int kSurfaceRefreshMilliseconds = 100;
 
@@ -74,9 +74,9 @@ VerticalPreview::VerticalPreview(QWidget *parent) : QWidget(parent)
 	overlay_timer_.setInterval(kOverlayIntervalMilliseconds);
 	connect(&overlay_timer_, &QTimer::timeout, this, &VerticalPreview::refresh_overlay);
 
-	recreate_timer_.setSingleShot(true);
-	recreate_timer_.setInterval(kRecreateSettleMilliseconds);
-	connect(&recreate_timer_, &QTimer::timeout, this, &VerticalPreview::recreate_display);
+	sync_timer_.setSingleShot(true);
+	sync_timer_.setInterval(kSurfaceSyncMilliseconds);
+	connect(&sync_timer_, &QTimer::timeout, this, &VerticalPreview::sync_surface);
 
 	purge_timer_.setSingleShot(true);
 	purge_timer_.setInterval(kRetiredDisplayPurgeMilliseconds);
@@ -143,61 +143,49 @@ void VerticalPreview::release()
 	purge_timer_.start();
 }
 
-void VerticalPreview::schedule_recreate(const char *reason)
+void VerticalPreview::schedule_surface_sync(bool force)
 {
-	recreate_reason_ = reason;
-	recreate_forced_ = true;
-	recreate_timer_.start();
+	sync_forced_ = sync_forced_ || force;
+	sync_timer_.start();
 }
 
-void VerticalPreview::schedule_position_check()
+bool VerticalPreview::sync_native_geometry()
 {
-	if (!display_) {
-		return;
+	QWindow *native = windowHandle();
+	if (native == nullptr) {
+		return false;
 	}
-	if (!recreate_forced_) {
-		recreate_reason_ = "moved inside its window";
+	const QWidget *native_parent = nativeParentWidget();
+	const QRect wanted(native_parent != nullptr ? mapTo(native_parent, QPoint(0, 0)) : pos(), size());
+	if (native->geometry() == wanted) {
+		return false;
 	}
-	recreate_timer_.start();
+	native->setGeometry(wanted);
+	return true;
 }
 
-QPoint VerticalPreview::position_in_window() const
+void VerticalPreview::sync_surface()
 {
-	return mapTo(window(), QPoint(0, 0));
-}
-
-void VerticalPreview::recreate_display()
-{
-	const bool forced = recreate_forced_;
-	recreate_forced_ = false;
+	const bool forced = sync_forced_;
+	sync_forced_ = false;
 	if (!isVisible()) {
 		return;
 	}
-	const QPoint in_window = position_in_window();
-	if (!forced && display_ && in_window == display_position_) {
-		return;
-	}
+	const bool moved = sync_native_geometry();
 	if (!display_) {
 		create_display();
 		return;
 	}
-	// On macOS the OpenGL swapchain re-attaches its surface to the view (NSOpenGLContext
-	// update, queued by gl_update) only when its pixel size changes. A move to another
-	// screen, or a move inside the window at the same size (a wider window shifting the
-	// docks), leaves the picture floating where the view used to be; a new display does
-	// not help, as its first frame already has the right size. So do what a manual resize
-	// does: render one size off by a pixel, then the real size once that frame is out.
+	if (!moved && !forced) {
+		return;
+	}
 	const QSize pixels = pixel_size();
-	const QScreen *current = screen();
-	blog(LOG_INFO,
-	     "[obs-multi-stream] vertical preview %s, refreshing its surface at %dx%d px, at %d,%d in its window, "
-	     "on screen '%s' (ratio %.2f)",
-	     recreate_reason_, pixels.width(), pixels.height(), in_window.x(), in_window.y(),
-	     current != nullptr ? current->name().toUtf8().constData() : "?", devicePixelRatioF());
 	if (pixels.isEmpty()) {
 		return;
 	}
-	display_position_ = in_window;
+	// libobs on macOS re-attaches the OpenGL surface to the view (NSOpenGLContext update,
+	// queued by gl_update) only when the display's pixel size changes, so render one frame
+	// a pixel short and then the real size, the same as a manual resize does.
 	obs_display_resize(display_, static_cast<uint32_t>(pixels.width()),
 			   static_cast<uint32_t>(pixels.height() > 1 ? pixels.height() - 1 : pixels.height() + 1));
 	QTimer::singleShot(kSurfaceRefreshMilliseconds, this, [this] {
@@ -210,6 +198,20 @@ void VerticalPreview::recreate_display()
 					   static_cast<uint32_t>(now.height()));
 		}
 	});
+}
+
+void VerticalPreview::watch_ancestors()
+{
+	for (const QPointer<QWidget> &ancestor : watched_ancestors_) {
+		if (ancestor != nullptr) {
+			ancestor->removeEventFilter(this);
+		}
+	}
+	watched_ancestors_.clear();
+	for (QWidget *ancestor = parentWidget(); ancestor != nullptr; ancestor = ancestor->parentWidget()) {
+		ancestor->installEventFilter(this);
+		watched_ancestors_.emplace_back(ancestor);
+	}
 }
 
 void VerticalPreview::watch_top_level()
@@ -226,8 +228,7 @@ void VerticalPreview::watch_top_level()
 	watched_top_level_ = handle;
 	if (handle != nullptr) {
 		handle->installEventFilter(this);
-		connect(handle, &QWindow::screenChanged, this,
-			[this](QScreen *) { schedule_recreate("moved to another screen"); });
+		connect(handle, &QWindow::screenChanged, this, [this](QScreen *) { schedule_surface_sync(true); });
 	}
 }
 
@@ -244,6 +245,7 @@ QSize VerticalPreview::pixel_size() const
 void VerticalPreview::watch_window()
 {
 	watch_top_level();
+	watch_ancestors();
 	QWindow *window = windowHandle();
 	if (window == watched_window_) {
 		return;
@@ -255,8 +257,7 @@ void VerticalPreview::watch_window()
 	watched_window_ = window;
 	if (window != nullptr) {
 		window->installEventFilter(this);
-		connect(window, &QWindow::screenChanged, this,
-			[this](QScreen *) { schedule_recreate("moved to another screen"); });
+		connect(window, &QWindow::screenChanged, this, [this](QScreen *) { schedule_surface_sync(true); });
 		// Same as OBSQTDisplay: becoming visible again creates or resizes the display.
 		connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
 			if (!visible || !isVisible()) {
@@ -327,7 +328,6 @@ void VerticalPreview::create_display()
 	if (!display_) {
 		return;
 	}
-	display_position_ = position_in_window();
 	obs_display_add_draw_callback(display_, draw, this);
 }
 
@@ -382,11 +382,15 @@ bool VerticalPreview::event(QEvent *event)
 	}
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
 	if (event->type() == QEvent::DevicePixelRatioChange) {
-		schedule_recreate("changed pixel ratio");
+		schedule_surface_sync(true);
 	}
 #endif
+	// Qt moves the native view itself here, but the OpenGL surface still needs a refresh.
 	if (event->type() == QEvent::Move) {
-		schedule_position_check();
+		schedule_surface_sync(true);
+	}
+	if (event->type() == QEvent::ParentChange) {
+		watch_ancestors();
 	}
 	// Docking and undocking can replace the native view that the display draws into.
 	if (event->type() == QEvent::WinIdChange) {
@@ -403,14 +407,11 @@ bool VerticalPreview::eventFilter(QObject *watched, QEvent *event)
 		    QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
 		release();
 	}
-	// While a recreate waits, every move of the window pushes it back until the move ends.
-	if (watched == watched_top_level_ && event->type() == QEvent::Move && recreate_timer_.isActive()) {
-		recreate_timer_.start();
-	}
-	// A resized window or a rearranged dock can shift the preview without resizing it.
-	if ((watched == watched_top_level_ && event->type() == QEvent::Resize) ||
-	    (watched == watched_window_ && event->type() == QEvent::Move)) {
-		schedule_position_check();
+	// A moved or resized ancestor can shift the preview inside the window without moving or
+	// resizing the preview itself, which leaves its native view behind.
+	if ((event->type() == QEvent::Move || event->type() == QEvent::Resize) && watched->isWidgetType() &&
+	    watched != this) {
+		schedule_surface_sync(false);
 	}
 	// A display lost while the window was hidden or off screen comes back once it is
 	// exposed again, without waiting for a resize.

@@ -69,15 +69,19 @@ private:
 	QSize pixel_size() const;
 	void create_display();
 	void watch_window();
-	// Recreates the display once the window has stopped moving after a screen or
-	// pixel-ratio change. Repeated requests and window moves push it back.
-	void schedule_recreate(const char *reason);
-	// Like schedule_recreate, but the display is remade only if the preview's position in
-	// its window differs from where the display was made by then.
-	void schedule_position_check();
-	QPoint position_in_window() const;
-	void recreate_display();
+	// Re-syncs the native view and the OpenGL surface once the layout settles. force also
+	// refreshes the surface when the native geometry was already right (a screen change,
+	// or a move of the preview itself, which Qt applies to the native view on its own).
+	void schedule_surface_sync(bool force);
+	void sync_surface();
+	// Qt moves a native child's view only when the child's own geometry changes. When an
+	// ancestor without a native window (the dock) moves, the view keeps its old frame and
+	// the picture floats where the preview used to be. Pushes the right geometry; returns
+	// whether it was stale.
+	bool sync_native_geometry();
 	void watch_top_level();
+	// Filters every ancestor widget, so a moved or resized dock or window triggers a sync.
+	void watch_ancestors();
 	PreviewMapping mapping() const;
 	Vec2 canvas_point(const QPointF &position) const;
 	PreviewInteraction::Tolerances tolerances() const;
@@ -94,13 +98,11 @@ private:
 	// the delay by then and any OpenGL swapchain update it queued has long finished.
 	std::vector<OBSDisplay> retired_displays_;
 	QTimer purge_timer_;
-	QTimer recreate_timer_;
-	const char *recreate_reason_ = "";
-	bool recreate_forced_ = false;
-	// Where the preview sat in its window when the current display was made.
-	QPoint display_position_;
-	// The top-level window holding this preview; its moves postpone a pending recreate.
+	QTimer sync_timer_;
+	bool sync_forced_ = false;
+	// The top-level window holding this preview, for its screen changes.
 	QPointer<QWindow> watched_top_level_;
+	std::vector<QPointer<QWidget>> watched_ancestors_;
 	QWindow *watched_window_ = nullptr;
 	// Read on the graphics thread, so only changed while no draw callback is registered.
 	std::shared_ptr<VerticalPreviewTarget> target_;
