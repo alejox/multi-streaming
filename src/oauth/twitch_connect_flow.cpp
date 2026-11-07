@@ -1,5 +1,6 @@
 #include "oauth/twitch_connect_flow.hpp"
 
+#include "oauth/https_client.hpp"
 #include "oauth/pkce.hpp"
 #include "oauth/twitch_helix.hpp"
 #include "oauth/twitch_oauth.hpp"
@@ -9,9 +10,7 @@
 
 #include <QDesktopServices>
 #include <QHostAddress>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
+#include <QMetaObject>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -43,7 +42,14 @@ TwitchConnectFlow::TwitchConnectFlow(std::string client_id, std::vector<std::str
 	  client_id_(std::move(client_id)),
 	  redirect_uris_(std::move(redirect_uris))
 {
-	network_ = new QNetworkAccessManager(this);
+}
+
+TwitchConnectFlow::~TwitchConnectFlow()
+{
+	cancelled_->store(true);
+	if (worker_.joinable()) {
+		worker_.join();
+	}
 }
 
 void TwitchConnectFlow::start(const std::optional<std::string> &refresh_token)
@@ -275,34 +281,52 @@ void TwitchConnectFlow::fetch_user_and_key()
 
 void TwitchConnectFlow::post_form(std::string_view url, std::string_view body, Handler on_done)
 {
-	QNetworkRequest request{QUrl(QString::fromStdString(std::string(url)))};
-	request.setHeader(QNetworkRequest::ContentTypeHeader,
-			  QStringLiteral("application/x-www-form-urlencoded"));
-	QNetworkReply *reply =
-		network_->post(request, QByteArray(body.data(), static_cast<qsizetype>(body.size())));
-	finish_reply(reply, std::move(on_done));
+	HttpsRequest request;
+	request.url = std::string(url);
+	request.headers.emplace_back("Content-Type: application/x-www-form-urlencoded");
+	request.post_body = std::string(body);
+	run_request(std::move(request), std::move(on_done));
 }
 
 void TwitchConnectFlow::get_json(std::string_view url, std::string_view access_token, Handler on_done)
 {
-	QNetworkRequest request{QUrl(QString::fromStdString(std::string(url)))};
-	request.setRawHeader("Client-ID", QByteArray(client_id_.data(), static_cast<qsizetype>(client_id_.size())));
-	request.setRawHeader("Authorization",
-			     QByteArray("Bearer ") + QByteArray(access_token.data(), static_cast<qsizetype>(access_token.size())));
-	QNetworkReply *reply = network_->get(request);
-	finish_reply(reply, std::move(on_done));
+	HttpsRequest request;
+	request.url = std::string(url);
+	request.headers.push_back("Client-ID: " + client_id_);
+	request.headers.push_back("Authorization: Bearer " + std::string(access_token));
+	run_request(std::move(request), std::move(on_done));
 }
 
-void TwitchConnectFlow::finish_reply(QNetworkReply *reply, Handler on_done)
+void TwitchConnectFlow::run_request(HttpsRequest request, Handler on_done)
 {
-	connect(reply, &QNetworkReply::finished, this, [this, reply, on_done = std::move(on_done)] {
-		const QByteArray data = reply->readAll();
-		reply->deleteLater();
-		if (reply->error() != QNetworkReply::NoError) {
-			on_done(std::nullopt);
+	// Requests run one at a time: the previous worker already posted its result, so this
+	// join returns at once.
+	if (worker_.joinable()) {
+		worker_.join();
+	}
+	worker_ = std::thread([this, request = std::move(request), on_done = std::move(on_done),
+			       cancelled = cancelled_]() mutable {
+		HttpsResponse response = perform_https_request(request, *cancelled);
+		if (cancelled->load()) {
 			return;
 		}
-		on_done(std::string(data.constData(), data.size()));
+		// The destructor joins this thread, so `this` is alive while posting; Qt drops the
+		// queued call if the object is destroyed before it runs.
+		QMetaObject::invokeMethod(
+			this,
+			[this, response = std::move(response), on_done = std::move(on_done), cancelled] {
+				if (cancelled->load()) {
+					return;
+				}
+				if (!response.body || response.status >= 500) {
+					obs_log(LOG_WARNING, "Twitch request failed (HTTP %ld): %s", response.status,
+						response.error.c_str());
+					on_done(std::nullopt);
+					return;
+				}
+				on_done(std::move(response.body));
+			},
+			Qt::QueuedConnection);
 	});
 }
 

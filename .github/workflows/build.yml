@@ -89,7 +89,7 @@ jobs:
           sudo add-apt-repository --yes ppa:obsproject/obs-studio
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            dbus gnome-keyring libsecret-1-dev libsimde-dev ninja-build obs-studio pkg-config qt6-base-dev
+            dbus gnome-keyring libcurl4-openssl-dev libsecret-1-dev libsimde-dev ninja-build obs-studio pkg-config qt6-base-dev
           dpkg-query --show obs-studio
 
       - name: Configure
