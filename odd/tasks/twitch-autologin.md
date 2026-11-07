@@ -20,7 +20,7 @@ remembers the session so later reconnects skip the browser.
 - [x] T5 Adapter: store/load the Twitch refresh token per destination through the existing SecretStore. Route: inline (writer subagent failed). Commit `9cf21ff`.
 - [x] T6 Dock: Qt transport — local listener on 8090, browser launch, HTTP via QNetworkAccessManager. Route: inline (writer subagent failed). Commit `69c1f17`.
 - [x] T7 Dock: "Connect with Twitch" button and wiring; refresh-or-authorize flow fills the key and stores the token. Client ID constant (placeholder until provided). Route: inline (writer subagent failed). Commit `69c1f17`.
-- [ ] T8 Locale and docs: en-US strings for the button and status; README note. Route: inline. Commit ``.
+- [x] T8 Locale and docs: en-US strings for the button and status; README note. Route: inline. Commit `69c1f17` (locale), `f1153cd` (README).
 
 ## Log
 
@@ -31,3 +31,4 @@ remembers the session so later reconnects skip the browser.
 - L5: `gentle-ai-worker` failed twice with "assistant reported an error" (0 tool calls), so T2 was implemented inline as the degradation path. `pkce_test` passes the RFC 7636 appendix B vector; full suite 28/28 green.
 - L6: T3-T5 implemented inline, full suite 31/31 green (commit `9cf21ff`).
 - L7: T6-T7 implemented inline; the macOS Xcode project was stale after the new sources, so the first link failed, `cmake --preset macos` regenerated it, and the rebuild succeeded (commit `69c1f17`). E2E auth still needs the real Client ID.
+- L8: T8 locale strings and README note landed (commits `69c1f17` and `f1153cd`). Final state: core suite 31/31 green; macOS plugin build succeeded.
