@@ -64,18 +64,6 @@ QString text(const char *key)
 	return QString::fromUtf8(obs_module_text(key));
 }
 
-// OBS theme utility class (Yami: text-danger, text-muted, ...). A change after the widget
-// was shown only takes effect once the style polishes it again.
-void set_theme_class(QWidget *widget, const char *css_class)
-{
-	if (widget->property("class").toString() == QLatin1String(css_class)) {
-		return;
-	}
-	widget->setProperty("class", QString::fromLatin1(css_class));
-	widget->style()->unpolish(widget);
-	widget->style()->polish(widget);
-}
-
 QFormLayout *new_form()
 {
 	auto *form = new QFormLayout();

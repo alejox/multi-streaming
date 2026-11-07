@@ -1,11 +1,13 @@
 #include "dock/vertical_controller.hpp"
 
 #include "dock/icons.hpp"
+#include "destinations/vertical_resolution.hpp"
 #include "dock/vertical_preview.hpp"
 #include "vertical_canvas/source_icons.hpp"
 
 #include <obs-module.h>
 
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -16,6 +18,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -25,6 +28,8 @@
 
 namespace multistream {
 namespace {
+
+constexpr int kResolutionInputLimit = 16384;
 
 QString text(const char *key)
 {
@@ -340,21 +345,89 @@ void VerticalController::edit_resolution()
 
 	QDialog dialog(dock_);
 	dialog.setWindowTitle(text("Vertical.Resolution"));
+
+	const std::vector<ResolutionPreset> &presets = vertical_resolution_presets();
+	auto *preset = new QComboBox(&dialog);
+	for (const ResolutionPreset &size : presets) {
+		preset->addItem(text("Vertical.ResolutionPresetItem")
+					.arg(size.width)
+					.arg(size.height)
+					.arg(QString::fromStdString(aspect_ratio_text(size.width, size.height))));
+	}
+	preset->addItem(text("Vertical.ResolutionCustom"));
+	const int custom_index = static_cast<int>(presets.size());
+
 	auto *width = new QSpinBox(&dialog);
 	auto *height = new QSpinBox(&dialog);
 	for (QSpinBox *side : {width, height}) {
-		side->setRange(2, 8192);
+		// Wider than the valid range, so a wrong size is explained instead of clamped.
+		side->setRange(1, kResolutionInputLimit);
 		side->setSingleStep(2);
 	}
 	width->setValue(canvas_.settings().width);
 	height->setValue(canvas_.settings().height);
+
+	auto *aspect = new QLabel(&dialog);
+	aspect->setProperty("class", "text-small text-muted");
+	auto *problem = new QLabel(&dialog);
+	problem->setProperty("class", "text-small text-danger");
+	problem->setWordWrap(true);
+	problem->hide();
+
 	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
 	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
 	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
+	const auto update = [=] {
+		const int w = width->value();
+		const int h = height->value();
+		{
+			const QSignalBlocker blocker(preset);
+			const auto found = preset_index_for(w, h);
+			preset->setCurrentIndex(found ? static_cast<int>(*found) : custom_index);
+		}
+		const std::string ratio = aspect_ratio_text(w, h);
+		aspect->setText(text("Vertical.ResolutionAspect").arg(QString::fromStdString(ratio)));
+
+		const ResolutionProblem found_problem = check_vertical_resolution(w, h);
+		switch (found_problem) {
+		case ResolutionProblem::NotEven:
+			problem->setText(text("Vertical.ResolutionInvalid"));
+			break;
+		case ResolutionProblem::OutOfRange:
+			problem->setText(text("Vertical.ResolutionOutOfRange"));
+			break;
+		case ResolutionProblem::None:
+			problem->clear();
+			break;
+		}
+		problem->setVisible(found_problem != ResolutionProblem::None);
+		const QString description = problem->text();
+		width->setAccessibleDescription(description);
+		height->setAccessibleDescription(description);
+		buttons->button(QDialogButtonBox::Ok)->setEnabled(found_problem == ResolutionProblem::None);
+	};
+	connect(preset, &QComboBox::currentIndexChanged, &dialog, [=, &presets](int index) {
+		if (index < 0 || index >= custom_index) {
+			return;
+		}
+		const ResolutionPreset &size = presets[static_cast<std::size_t>(index)];
+		const QSignalBlocker width_blocker(width);
+		const QSignalBlocker height_blocker(height);
+		width->setValue(size.width);
+		height->setValue(size.height);
+		update();
+	});
+	connect(width, &QSpinBox::valueChanged, &dialog, update);
+	connect(height, &QSpinBox::valueChanged, &dialog, update);
+	update();
+
 	auto *form = new QFormLayout(&dialog);
+	form->addRow(text("Vertical.ResolutionPreset"), preset);
 	form->addRow(text("Vertical.ResolutionWidth"), width);
 	form->addRow(text("Vertical.ResolutionHeight"), height);
+	form->addRow(QString(), aspect);
+	form->addRow(QString(), problem);
 	form->addRow(buttons);
 
 	if (dialog.exec() == QDialog::Accepted) {

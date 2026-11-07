@@ -5,8 +5,10 @@
 
 #include <obs-module.h>
 
+#include <QAction>
 #include <QEvent>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QListWidget>
 #include <QResizeEvent>
@@ -76,6 +78,8 @@ VerticalDock::VerticalDock(QWidget *parent)
 	empty_hint_->hide();
 	audio_note_->setWordWrap(true);
 	audio_note_->setTextFormat(Qt::RichText);
+	audio_note_->setProperty("class", "text-small text-muted");
+	audio_note_->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard);
 	audio_note_->hide();
 
 	scenes_->setObjectName("vertical-scenes");
@@ -83,15 +87,15 @@ VerticalDock::VerticalDock(QWidget *parent)
 	scenes_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 	items_->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-	auto *add_scene = icon_button("icons/ui/add.svg", "Vertical.AddScene");
-	auto *remove_scene = icon_button("icons/ui/remove.svg", "Vertical.RemoveScene");
-	auto *scene_up = icon_button("icons/ui/up.svg", "Vertical.MoveSceneUp");
-	auto *scene_down = icon_button("icons/ui/down.svg", "Vertical.MoveSceneDown");
-	auto *add_source = icon_button("icons/ui/add.svg", "Vertical.AddSource");
-	auto *remove_item = icon_button("icons/ui/remove.svg", "Vertical.RemoveSource");
-	auto *item_up = icon_button("icons/ui/up.svg", "Vertical.MoveUp");
-	auto *item_down = icon_button("icons/ui/down.svg", "Vertical.MoveDown");
-	auto *settings = icon_button("icons/ui/settings.svg", "Vertical.ResolutionSettings");
+	auto *add_scene = icon_button("btn-tool icon-plus", "icons/ui/add.svg", "Vertical.AddScene");
+	auto *remove_scene = icon_button("btn-tool icon-minus", "icons/ui/remove.svg", "Vertical.RemoveScene");
+	auto *scene_up = icon_button("btn-tool icon-up", "icons/ui/up.svg", "Vertical.MoveSceneUp");
+	auto *scene_down = icon_button("btn-tool icon-down", "icons/ui/down.svg", "Vertical.MoveSceneDown");
+	auto *add_source = icon_button("btn-tool icon-plus", "icons/ui/add.svg", "Vertical.AddSource");
+	auto *remove_item = icon_button("btn-tool icon-minus", "icons/ui/remove.svg", "Vertical.RemoveSource");
+	auto *item_up = icon_button("btn-tool icon-up", "icons/ui/up.svg", "Vertical.MoveUp");
+	auto *item_down = icon_button("btn-tool icon-down", "icons/ui/down.svg", "Vertical.MoveDown");
+	auto *settings = icon_button("btn-tool icon-gear", "icons/ui/settings.svg", "Vertical.ResolutionSettings");
 
 	lists_->addWidget(list_panel("Vertical.Scenes", scenes_, {add_scene, remove_scene, scene_up, scene_down}));
 	lists_->addWidget(list_panel("Vertical.Sources", items_, {add_source, remove_item, item_up, item_down}));
@@ -174,17 +178,35 @@ VerticalDock::VerticalDock(QWidget *parent)
 	});
 	connect(audio_note_, &QLabel::linkActivated, this, [this] { emit remove_hidden_audio_requested(); });
 	connect(settings, &QToolButton::clicked, this, [this] { emit resolution_settings_requested(); });
+
+	add_delete_shortcut(scenes_, remove_scene);
+	add_delete_shortcut(items_, remove_item);
+	apply_icons();
 }
 
-QToolButton *VerticalDock::icon_button(const char *icon_file, const char *tooltip_key)
+void VerticalDock::add_delete_shortcut(QListWidget *list, QToolButton *remove)
+{
+	auto *action = new QAction(remove->toolTip(), list);
+#if defined(Q_OS_MACOS)
+	action->setShortcuts({QKeySequence(QKeySequence::Delete), QKeySequence(Qt::Key_Backspace)});
+#else
+	action->setShortcut(QKeySequence::Delete);
+#endif
+	// Only while the list has the focus: never while a scene name is being typed.
+	action->setShortcutContext(Qt::WidgetShortcut);
+	list->addAction(action);
+	connect(action, &QAction::triggered, remove, &QToolButton::click);
+}
+
+QToolButton *VerticalDock::icon_button(const char *css_class, const char *fallback_icon_file, const char *tooltip_key)
 {
 	auto *button = new QToolButton();
 	button->setAutoRaise(true);
-	button->setIcon(themed_icon(icon_file, palette()));
+	button->setProperty("class", css_class);
 	button->setIconSize(QSize(kRowIconSize, kRowIconSize));
 	button->setToolTip(text(tooltip_key));
 	button->setAccessibleName(text(tooltip_key));
-	icon_buttons_.push_back({button, icon_file});
+	icon_buttons_.push_back({button, fallback_icon_file});
 	return button;
 }
 
@@ -192,6 +214,7 @@ QWidget *VerticalDock::list_panel(const char *title_key, QListWidget *list, cons
 {
 	auto *panel = new QWidget();
 	auto *title = new QLabel(text(title_key));
+	title->setProperty("class", "subtitle");
 	auto *toolbar = new QHBoxLayout();
 	toolbar->setContentsMargins(0, 0, 0, 0);
 	toolbar->setSpacing(0);
@@ -265,7 +288,7 @@ void VerticalDock::update_row(QWidget *row, const VerticalItemView &view)
 void VerticalDock::apply_icons()
 {
 	for (const IconButton &entry : icon_buttons_) {
-		entry.button->setIcon(themed_icon(entry.icon_file, palette()));
+		apply_class_icon(entry.button, themed_icon(entry.fallback_icon_file, palette()));
 	}
 	for (int row = 0; row < items_->count() && row < static_cast<int>(shown_items_.size()); ++row) {
 		update_row(items_->itemWidget(items_->item(row)), shown_items_[static_cast<std::size_t>(row)]);

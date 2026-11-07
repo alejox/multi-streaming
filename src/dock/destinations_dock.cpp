@@ -84,17 +84,6 @@ QColor fallback_tone_color(RowTone tone, const QPalette &palette)
 	return palette.color(QPalette::WindowText);
 }
 
-// Applies an OBS theme class; the style must be re-polished for a change to show.
-void set_theme_class(QWidget *widget, const char *name)
-{
-	if (widget->property("class").toString() == QLatin1String(name)) {
-		return;
-	}
-	widget->setProperty("class", QString::fromLatin1(name));
-	widget->style()->unpolish(widget);
-	widget->style()->polish(widget);
-}
-
 // The color the theme gave a label through its class, or the fallback when the class
 // gave it nothing of its own.
 QColor themed_text_color(QLabel *label, const QPalette &plain, const QColor &fallback)
@@ -102,18 +91,6 @@ QColor themed_text_color(QLabel *label, const QPalette &plain, const QColor &fal
 	label->ensurePolished();
 	const QColor color = label->palette().color(QPalette::WindowText);
 	return color != plain.color(QPalette::WindowText) ? color : fallback;
-}
-
-// Lets the theme's class supply the icon (OBS's own toolbar icons) and uses the plugin's
-// monochrome icon only when the theme has none for that class.
-void apply_class_icon(QAbstractButton *button, const QIcon &fallback)
-{
-	button->setIcon(QIcon());
-	button->style()->unpolish(button);
-	button->style()->polish(button);
-	if (button->icon().isNull()) {
-		button->setIcon(fallback);
-	}
 }
 
 QPixmap status_dot(const QColor &color, qreal ratio)

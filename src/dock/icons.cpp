@@ -2,10 +2,13 @@
 
 #include <obs-module.h>
 
+#include <QAbstractButton>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
 #include <QString>
+#include <QStyle>
+#include <QWidget>
 
 namespace multistream {
 namespace {
@@ -97,6 +100,28 @@ QPixmap colored_pixmap(const char *relative_path, const QColor &color, int logic
 	QPixmap pixmap = render(path, color, qRound(logical_size * pixel_ratio));
 	pixmap.setDevicePixelRatio(pixel_ratio);
 	return pixmap;
+}
+
+void set_theme_class(QWidget *widget, const char *css_class)
+{
+	if (widget->property("class").toString() == QLatin1String(css_class)) {
+		return;
+	}
+	widget->setProperty("class", QString::fromLatin1(css_class));
+	widget->style()->unpolish(widget);
+	widget->style()->polish(widget);
+}
+
+// A QSS qproperty-icon is applied while polishing, and a later setIcon would overwrite it,
+// so the fallback is only set once polishing left the icon empty.
+void apply_class_icon(QAbstractButton *button, const QIcon &fallback)
+{
+	button->setIcon(QIcon());
+	button->style()->unpolish(button);
+	button->style()->polish(button);
+	if (button->icon().isNull()) {
+		button->setIcon(fallback);
+	}
 }
 
 } // namespace multistream

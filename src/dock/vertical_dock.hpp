@@ -68,10 +68,13 @@ protected:
 private:
 	struct IconButton {
 		QToolButton *button;
-		const char *icon_file;
+		// Used only when the theme has no icon for the button's class.
+		const char *fallback_icon_file;
 	};
 
-	QToolButton *icon_button(const char *icon_file, const char *tooltip_key);
+	QToolButton *icon_button(const char *css_class, const char *fallback_icon_file, const char *tooltip_key);
+	// Delete (and Backspace on macOS, like OBS) while the list itself has the focus.
+	void add_delete_shortcut(QListWidget *list, QToolButton *remove);
 	QWidget *list_panel(const char *title_key, QListWidget *list, const std::vector<QToolButton *> &tools);
 	QWidget *item_row(const VerticalItemView &view);
 	void update_row(QWidget *row, const VerticalItemView &view);

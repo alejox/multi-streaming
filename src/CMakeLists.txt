@@ -31,6 +31,7 @@ add_library(
   destinations/start_tickets.cpp
   destinations/stream_stats.cpp
   destinations/validation.cpp
+  destinations/vertical_resolution.cpp
   destinations/vertical_settings.cpp
   oauth/base64url.cpp
   oauth/pkce.cpp
