@@ -44,6 +44,7 @@ Download the latest packages from the [releases page](https://github.com/alejox/
 | Area | Behavior |
 |------|----------|
 | Destinations | RTMP/RTMPS URL plus key, per-row start/stop, Start all, status, bitrate, dropped frames |
+| Twitch login | "Connect with Twitch" opens the browser for OAuth, fills the stream key, and remembers the session |
 | Video source | `main` mix or `vertical` canvas, per destination |
 | Encoders | Shared when settings match; dedicated otherwise |
 | Main stream sync | Optional start/stop with the OBS stream. Synced destinations use dedicated encoders, because OBS signals the start before the main encoders are active |
@@ -63,6 +64,7 @@ Download the latest packages from the [releases page](https://github.com/alejox/
 
 ## Known limits
 
+- **Twitch login needs a real Twitch app Client ID.** The placeholder in `src/oauth/twitch_client_id.hpp` must be replaced with a Client ID from dev.twitch.tv/console whose OAuth Redirect URL is `http://localhost:8090/`. Until then the "Connect with Twitch" button cannot complete the OAuth flow.
 - A peer that never answers the RTMP handshake delays OBS exit by about 22 s.
 - The UI waits up to 5 s for stopped outputs at a profile change, a collection change, and exit.
 - Exit during a blocked Keychain read can report leaks.
