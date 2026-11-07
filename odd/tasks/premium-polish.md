@@ -34,7 +34,7 @@ colors, flat editor form, untranslated validation messages, unsafe destructive a
 
 ## Tasks
 
-- [ ] T1 Preview: push native child geometry (`windowHandle()->setGeometry`) on ancestor move/resize/screen change, then off-by-one resize; drop display recreation hacks. Route: inline (one file, cause understood).
+- [x] T1 Preview: push native child geometry (`windowHandle()->setGeometry`) on ancestor move/resize/screen change, then off-by-one resize; drop display recreation hacks. Route: inline (one file, cause understood).
 - [ ] T2 Main-stream lifecycle: start follow-main destinations on `STREAMING_STARTED`; stop vertical outputs on `CANVAS_REMOVED`; handle core `video_reset` for the vertical canvas. Route: delegated writer (2+ files).
 - [ ] T3 Encoder sharing: share main encoders only with follow-main destinations (lifetimes match); copy encoders honor main rescale. Route: delegated writer (core + tests).
 - [ ] T4 Twitch OAuth robustness: free sockets, match redirect path, login timeout, store refresh token only on Save. Route: delegated writer.
@@ -58,8 +58,9 @@ colors, flat editor form, untranslated validation messages, unsafe destructive a
 
 (updated per task with commit ids and observed check results)
 
+- T1: commit 355ac32. macOS build OK; installed + codesign OK. Root cause: Qt setGeometry_sys only moves a native child when its own geometry changes (qtbase qwidget.cpp L7314-7420). Pending: user check across monitors.
 - Engram mirror `odd/premium-polish/tasks`: PENDING (auto-mode classifier blocked mem_save; resync when available).
 
 ## Next step
 
-T1.
+T2+T3 (delegated writer).
