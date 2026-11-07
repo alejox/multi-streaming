@@ -13,8 +13,8 @@ remembers the session so later reconnects skip the browser.
 
 ## Tasks
 
-- [x] T1 Build: add Qt6::Network to the module and link `Qt6::Network`. Route: inline. Commit `foundation`.
-- [x] T2 Core: vendored SHA-256, base64url, and PKCE (code verifier + S256 challenge). Route: inline (writer subagent failed). Commit `foundation`.
+- [x] T1 Build: add Qt6::Network to the module and link `Qt6::Network`. Route: inline. Commit `b0a28b9`.
+- [x] T2 Core: vendored SHA-256, base64url, and PKCE (code verifier + S256 challenge). Route: inline (writer subagent failed). Commit `b0a28b9`.
 - [ ] T3 Core: Twitch OAuth request builders and token-response parsing (authorize URL, redirect parse, token exchange, refresh). Route: delegated. Commit ``.
 - [ ] T4 Core: Twitch Helix request builders and response parsing (users, streams/key). Route: delegated. Commit ``.
 - [ ] T5 Adapter: store/load the Twitch refresh token per destination through the existing SecretStore. Route: delegated. Commit ``.
