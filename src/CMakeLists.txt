@@ -34,6 +34,9 @@ add_library(
   oauth/base64url.cpp
   oauth/pkce.cpp
   oauth/sha256.cpp
+  oauth/twitch_helix.cpp
+  oauth/twitch_oauth.cpp
+  oauth/twitch_token_store.cpp
   vertical_canvas/preview_geometry.cpp
   vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp
