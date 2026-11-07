@@ -98,6 +98,22 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	form->addRow(QString(), show_key_);
 
 	connect_twitch_ = new QPushButton(obs_module_text("Editor.ConnectTwitch"), this);
+	{
+		// Twitch brand button: white logo and text on Twitch purple.
+		const QColor purple = brand_color(Platform::Twitch);
+		connect_twitch_->setIcon(QIcon(colored_pixmap("icons/platforms/twitch.svg", Qt::white, 16,
+							      devicePixelRatioF())));
+		connect_twitch_->setIconSize(QSize(16, 16));
+		connect_twitch_->setCursor(Qt::PointingHandCursor);
+		connect_twitch_->setStyleSheet(
+			QStringLiteral("QPushButton { background-color: %1; color: white; border: none;"
+				       " border-radius: 4px; padding: 6px 14px; font-weight: 600; }"
+				       "QPushButton:hover { background-color: %2; }"
+				       "QPushButton:pressed { background-color: %3; }"
+				       "QPushButton:disabled { background-color: %4; color: rgba(255,255,255,0.6); }")
+				.arg(purple.name(), purple.lighter(115).name(), purple.darker(115).name(),
+				     purple.darker(160).name()));
+	}
 	connect(connect_twitch_, &QPushButton::clicked, this, &DestinationEditorDialog::connect_twitch);
 	connect_status_ = new QLabel(this);
 	connect_status_->setWordWrap(true);
@@ -303,7 +319,7 @@ void DestinationEditorDialog::update_connect_visibility()
 void DestinationEditorDialog::connect_twitch()
 {
 	if (!secrets_) {
-		show_connect_status(QStringLiteral("Stream key storage is unavailable"));
+		show_connect_status(obs_module_text("Editor.SecretsUnavailable"));
 		return;
 	}
 	if (flow_) {
