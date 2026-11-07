@@ -126,14 +126,14 @@ void TwitchConnectFlow::answer(QTcpSocket *socket, const QString &body)
 void TwitchConnectFlow::handle_redirect_query(std::string_view query)
 {
 	const TwitchRedirect redirect = parse_redirect_query(query);
-	if (redirect.state && *redirect.state != state_) {
-		emit failed(QStringLiteral("The Twitch login did not match this request"));
-		return;
-	}
 	if (redirect.error) {
 		const std::string detail =
 			redirect.error_description.value_or(redirect.error.value_or("Twitch denied the login"));
 		emit failed(QString::fromStdString(detail));
+		return;
+	}
+	if (!redirect.state || *redirect.state != state_) {
+		emit failed(QStringLiteral("The Twitch login did not match this request"));
 		return;
 	}
 	if (!redirect.code) {
