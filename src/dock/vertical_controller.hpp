@@ -9,7 +9,6 @@
 
 #include <QObject>
 #include <QPointer>
-#include <QTimer>
 
 #include <string>
 #include <vector>
@@ -32,7 +31,6 @@ public:
 
 private:
 	void refresh();
-	void refresh_if_changed();
 	void show_item_menu(std::int64_t id, const QPoint &global_position);
 	void show_add_source_menu(const QPoint &global_position);
 	void select_new_item(std::int64_t id);
@@ -42,13 +40,10 @@ private:
 	void rename_scene(const QString &name, const QString &new_name);
 	void remove_scene(const QString &name);
 	void edit_resolution();
-	std::string snapshot() const;
 
 	VerticalCanvas &canvas_;
 	StreamingEngine &engine_;
 	QPointer<VerticalDock> dock_;
-	QTimer change_timer_;
-	std::string shown_snapshot_;
 };
 
 } // namespace multistream

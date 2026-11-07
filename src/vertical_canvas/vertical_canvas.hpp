@@ -166,6 +166,14 @@ private:
 	// libobs restores extra canvases with their old video info when main video is reset
 	// (Settings > Video), then emits the core "video_reset" signal.
 	static void on_video_reset(void *data, calldata_t *);
+	// Scenes and sources also change through OBS's own docks and dialogs, on any thread.
+	// Bursts (a scene collection load, a group of items) become one queued notification.
+	static void on_external_change(void *data, calldata_t *);
+
+	void watch_canvas();
+	// Follows the scene on the canvas's channel; reconnects only when it changed.
+	void watch_active_scene();
+	void unwatch();
 
 	bool reset_video();
 	void set_channel(obs_source_t *scene_source);
@@ -183,6 +191,12 @@ private:
 	OBSCanvas canvas_;
 	std::shared_ptr<VerticalPreviewTarget> preview_ = std::make_shared<VerticalPreviewTarget>();
 	std::function<void()> listener_;
+	// The canvas's scene list and renames of the sources its items show.
+	std::vector<OBSSignal> canvas_signals_;
+	// The items of the scene on the channel.
+	std::vector<OBSSignal> scene_signals_;
+	OBSWeakSource watched_scene_;
+	std::atomic<bool> change_queued_{false};
 	// Receives queued work from libobs signals; destroying it drops what is still queued.
 	std::unique_ptr<QObject> signal_context_;
 };

@@ -26,9 +26,6 @@
 namespace multistream {
 namespace {
 
-// Sources can vanish through OBS's own docks, without any call into this plugin.
-constexpr int kChangeCheckMilliseconds = 500;
-
 QString text(const char *key)
 {
 	return QString::fromUtf8(obs_module_text(key));
@@ -64,6 +61,7 @@ VerticalController::VerticalController(VerticalCanvas &canvas, StreamingEngine &
 {
 	dock->preview()->set_target(canvas_.preview_target());
 	dock->preview()->set_canvas(&canvas_);
+	// The canvas also reports changes made through OBS's own docks, from libobs signals.
 	canvas_.set_changed_listener([this] { refresh(); });
 
 	connect(dock, &VerticalDock::scene_selected, this, [this](const QString &name) {
@@ -103,9 +101,6 @@ VerticalController::VerticalController(VerticalCanvas &canvas, StreamingEngine &
 		[this](std::int64_t id) { canvas_.open_item_properties(id); });
 	connect(dock, &VerticalDock::resolution_settings_requested, this, &VerticalController::edit_resolution);
 
-	connect(&change_timer_, &QTimer::timeout, this, &VerticalController::refresh_if_changed);
-	change_timer_.start(kChangeCheckMilliseconds);
-
 	refresh();
 }
 
@@ -118,32 +113,11 @@ VerticalController::~VerticalController()
 	}
 }
 
-std::string VerticalController::snapshot() const
-{
-	std::string result = canvas_.active_scene().value_or("");
-	for (const std::string &scene : canvas_.scenes()) {
-		result += '\n' + scene;
-	}
-	for (const VerticalItem &item : canvas_.items()) {
-		result += '\n' + std::to_string(item.id) + (item.visible ? "v" : "h") + (item.locked ? "l" : "u") + item.name;
-	}
-	return result;
-}
-
-void VerticalController::refresh_if_changed()
-{
-	if (dock_ && dock_->isVisible() && snapshot() != shown_snapshot_) {
-		refresh();
-	}
-}
-
 void VerticalController::refresh()
 {
 	if (!dock_) {
 		return;
 	}
-	shown_snapshot_ = snapshot();
-
 	dock_->set_available(canvas_.available());
 
 	std::vector<QString> scenes;

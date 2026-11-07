@@ -333,6 +333,7 @@ VerticalCanvas::~VerticalCanvas()
 {
 	// Disconnecting waits for a signal in flight, so nothing queues work after this.
 	signal_handler_disconnect(obs_get_signal_handler(), "video_reset", on_video_reset, this);
+	unwatch();
 	signal_context_.reset();
 }
 
@@ -341,6 +342,63 @@ void VerticalCanvas::on_video_reset(void *data, calldata_t *)
 	auto *self = static_cast<VerticalCanvas *>(data);
 	// Emitted from inside obs_reset_video: reset the canvas after that call has returned.
 	QMetaObject::invokeMethod(self->signal_context_.get(), [self] { self->refresh_video(); }, Qt::QueuedConnection);
+}
+
+void VerticalCanvas::on_external_change(void *data, calldata_t *)
+{
+	auto *self = static_cast<VerticalCanvas *>(data);
+	if (self->change_queued_.exchange(true)) {
+		return;
+	}
+	QMetaObject::invokeMethod(
+		self->signal_context_.get(),
+		[self] {
+			self->change_queued_ = false;
+			self->watch_active_scene();
+			self->notify();
+		},
+		Qt::QueuedConnection);
+}
+
+void VerticalCanvas::watch_canvas()
+{
+	canvas_signals_.clear();
+	canvas_signals_.reserve(5);
+	signal_handler_t *canvas_signals = obs_canvas_get_signal_handler(canvas_);
+	for (const char *signal : {"source_add", "source_remove", "source_rename", "channel_change"}) {
+		canvas_signals_.emplace_back(canvas_signals, signal, on_external_change, this);
+	}
+	// Items mostly show the main canvas's sources, whose renames only the core reports.
+	canvas_signals_.emplace_back(obs_get_signal_handler(), "source_rename", on_external_change, this);
+	watch_active_scene();
+}
+
+void VerticalCanvas::watch_active_scene()
+{
+	OBSSourceAutoRelease scene = canvas_ ? obs_canvas_get_channel(canvas_, 0) : nullptr;
+	if (scene && watched_scene_ && obs_weak_source_references_source(watched_scene_, scene)) {
+		return;
+	}
+	scene_signals_.clear();
+	watched_scene_ = nullptr;
+	if (!scene || !obs_source_is_scene(scene)) {
+		return;
+	}
+
+	OBSWeakSourceAutoRelease weak = obs_source_get_weak_source(scene);
+	watched_scene_ = weak.Get();
+	signal_handler_t *scene_signals = obs_source_get_signal_handler(scene);
+	scene_signals_.reserve(6);
+	for (const char *signal : {"item_add", "item_remove", "reorder", "refresh", "item_visible", "item_locked"}) {
+		scene_signals_.emplace_back(scene_signals, signal, on_external_change, this);
+	}
+}
+
+void VerticalCanvas::unwatch()
+{
+	scene_signals_.clear();
+	canvas_signals_.clear();
+	watched_scene_ = nullptr;
 }
 
 video_t *VerticalCanvas::video_for(VideoSource source)
@@ -409,6 +467,7 @@ bool VerticalCanvas::attach()
 	}
 
 	switch_scene(pick_active_scene(names, settings_.active_scene).value_or(std::string()));
+	watch_canvas();
 	preview_->set(canvas_, settings_.width, settings_.height);
 	obs_log(LOG_INFO, "vertical canvas ready at %dx%d with %zu scenes", settings_.width, settings_.height,
 		names.size());
@@ -419,6 +478,7 @@ bool VerticalCanvas::attach()
 void VerticalCanvas::detach()
 {
 	preview_->clear();
+	unwatch();
 	if (canvas_) {
 		// Scene deactivation and the release belong here, not to whoever goes last.
 		obs_canvas_set_channel(canvas_, 0, nullptr);
@@ -564,6 +624,7 @@ bool VerticalCanvas::switch_scene(const std::string &name)
 		return false;
 	}
 	obs_canvas_set_channel(canvas_, 0, source);
+	watch_active_scene();
 	settings_.active_scene = name;
 	persist();
 	notify();
