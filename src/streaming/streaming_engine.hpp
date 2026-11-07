@@ -80,7 +80,7 @@ public:
 	void start_all();
 	void stop_all();
 
-	void main_stream_starting();
+	void main_stream_started();
 	void main_stream_stopping();
 
 	void sample_stats();

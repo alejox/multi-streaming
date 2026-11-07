@@ -418,7 +418,7 @@ void StreamingEngine::stop_all()
 	stop(select_for_stop_all(destinations_, session_states()));
 }
 
-void StreamingEngine::main_stream_starting()
+void StreamingEngine::main_stream_started()
 {
 	start(select_for_main_start(destinations_, session_states()));
 }

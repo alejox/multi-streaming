@@ -147,13 +147,22 @@ void on_frontend_event(obs_frontend_event event, void *)
 		composition->vertical.refresh_video();
 		break;
 	case OBS_FRONTEND_EVENT_CANVAS_REMOVED:
+		// OBSStudioAPI::on_event drops this event while saving is disabled, which covers a
+		// collection being unloaded (frontend/OBSStudioAPI.cpp:756-759 at OBS 33.0.1), so
+		// SCENE_COLLECTION_CHANGING stays the main guard. When it does arrive for our
+		// canvas, its outputs stop first: they would otherwise keep a removed canvas alive.
+		if (composition->vertical.removed()) {
+			composition->engine.stop_source_now(multistream::VideoSource::Vertical);
+		}
 		composition->vertical.check_removed();
 		break;
-	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
-		composition->engine.main_stream_starting();
+	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
+		// Not STARTING: OBS sends that before it starts its output, which is then not active
+		// yet, so its encoders could not be shared; and a start that fails right away sends
+		// no later event, which would leave the destinations that follow main live.
+		composition->engine.main_stream_started();
 		break;
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPING:
-	// A main stream that fails to start skips STOPPING.
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
 		composition->engine.main_stream_stopping();
 		break;
