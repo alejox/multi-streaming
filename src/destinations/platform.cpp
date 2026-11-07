@@ -121,6 +121,23 @@ std::optional<std::string> preset_ingest_url(Platform platform)
 	}
 }
 
+std::optional<std::string> stream_key_page_url(Platform platform)
+{
+	switch (platform) {
+	case Platform::YouTube:
+		// "UC" is YouTube Studio's shortcut for the signed-in user's own channel.
+		return "https://studio.youtube.com/channel/UC/livestreaming";
+	case Platform::Twitch:
+		return "https://dashboard.twitch.tv/settings/stream";
+	case Platform::Kick:
+		return "https://kick.com/dashboard/settings/stream";
+	case Platform::Facebook:
+		return "https://www.facebook.com/live/producer";
+	default:
+		return std::nullopt;
+	}
+}
+
 std::string url_after_picking(Platform platform, const std::string &current_url)
 {
 	if (const auto preset = preset_ingest_url(platform)) {

@@ -110,3 +110,26 @@ TEST_CASE(picking_a_service_without_a_preset_clears_a_leftover_preset)
 	CHECK_EQ(url_after_picking(Platform::Kick, "rtmps://a.rtmps.youtube.com:443/live2"), "");
 	CHECK_EQ(url_after_picking(Platform::Custom, "rtmps://rtmp-api.facebook.com:443/rtmp/"), "");
 }
+
+TEST_CASE(stream_key_pages_exist_only_for_stable_dashboards)
+{
+	CHECK_EQ(stream_key_page_url(Platform::YouTube).value_or(""),
+		 "https://studio.youtube.com/channel/UC/livestreaming");
+	CHECK_EQ(stream_key_page_url(Platform::Twitch).value_or(""), "https://dashboard.twitch.tv/settings/stream");
+	CHECK_EQ(stream_key_page_url(Platform::Kick).value_or(""), "https://kick.com/dashboard/settings/stream");
+	CHECK_EQ(stream_key_page_url(Platform::Facebook).value_or(""), "https://www.facebook.com/live/producer");
+	CHECK(!stream_key_page_url(Platform::Custom));
+	CHECK(!stream_key_page_url(Platform::TikTok));
+	CHECK(!stream_key_page_url(Platform::X));
+	CHECK(!stream_key_page_url(Platform::Instagram));
+}
+
+TEST_CASE(stream_key_pages_are_https_and_on_their_service)
+{
+	for (const Platform platform : kAllPlatforms) {
+		if (const auto url = stream_key_page_url(platform)) {
+			CHECK(url->rfind("https://", 0) == 0);
+			CHECK(detect_platform(*url) == platform);
+		}
+	}
+}

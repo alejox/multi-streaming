@@ -31,6 +31,10 @@ Platform effective_platform(std::optional<Platform> stored, std::string_view ser
 // per-region. Others hand out per-user URLs, which the user has to paste.
 std::optional<std::string> preset_ingest_url(Platform platform);
 
+// The service's public dashboard page that shows the user's stream key, for services whose
+// page has a stable address that works for every account.
+std::optional<std::string> stream_key_page_url(Platform platform);
+
 // The URL field after picking a service: its preset if it has one. Without one, a URL the
 // user pasted stays, and a preset left from the previous choice goes.
 std::string url_after_picking(Platform platform, const std::string &current_url);
