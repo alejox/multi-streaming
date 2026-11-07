@@ -7,6 +7,9 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#include <QMetaObject>
+#include <QObject>
+
 #include <graphics/matrix4.h>
 #include <graphics/vec4.h>
 
@@ -319,8 +322,24 @@ std::string VerticalPreviewTarget::probe_overlay(std::uint32_t window_width, std
 
 VerticalCanvas::VerticalCanvas(std::filesystem::path settings_path)
 	: settings_path_(std::move(settings_path)),
-	  settings_(load_vertical_settings(settings_path_))
+	  settings_(load_vertical_settings(settings_path_)),
+	  signal_context_(std::make_unique<QObject>())
 {
+	signal_handler_connect(obs_get_signal_handler(), "video_reset", on_video_reset, this);
+}
+
+VerticalCanvas::~VerticalCanvas()
+{
+	// Disconnecting waits for a signal in flight, so nothing queues work after this.
+	signal_handler_disconnect(obs_get_signal_handler(), "video_reset", on_video_reset, this);
+	signal_context_.reset();
+}
+
+void VerticalCanvas::on_video_reset(void *data, calldata_t *)
+{
+	auto *self = static_cast<VerticalCanvas *>(data);
+	// Emitted from inside obs_reset_video: reset the canvas after that call has returned.
+	QMetaObject::invokeMethod(self->signal_context_.get(), [self] { self->refresh_video(); }, Qt::QueuedConnection);
 }
 
 video_t *VerticalCanvas::video_for(VideoSource source)
@@ -409,9 +428,14 @@ void VerticalCanvas::refresh_video()
 	}
 }
 
+bool VerticalCanvas::removed() const
+{
+	return canvas_ && obs_canvas_removed(canvas_);
+}
+
 void VerticalCanvas::check_removed()
 {
-	if (canvas_ && obs_canvas_removed(canvas_)) {
+	if (removed()) {
 		detach();
 	}
 }

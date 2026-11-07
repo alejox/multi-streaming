@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+class QObject;
+
 namespace multistream {
 
 // The editing marks over the canvas, as the UI thread last saw them. The graphics thread
@@ -81,6 +83,9 @@ struct VerticalItem {
 class VerticalCanvas final : public VideoSources {
 public:
 	explicit VerticalCanvas(std::filesystem::path settings_path);
+	~VerticalCanvas() override;
+	VerticalCanvas(const VerticalCanvas &) = delete;
+	VerticalCanvas &operator=(const VerticalCanvas &) = delete;
 
 	video_t *video_for(VideoSource source) override;
 	std::shared_ptr<void> hold(VideoSource source) override;
@@ -90,9 +95,12 @@ public:
 	void detach();
 	bool available() const { return static_cast<bool>(canvas_); }
 
-	// After a profile change: main's frame rate may be different now.
+	// After a profile change or any main video reset: main's frame rate and format may be
+	// different now. Main video resets are also followed on their own, see video_reset.
 	void refresh_video();
 
+	// Whether the frontend removed this canvas, which then must be detached.
+	bool removed() const;
 	// When the frontend removed a canvas: detaches if it was this one.
 	void check_removed();
 
@@ -155,6 +163,10 @@ public:
 	BoxResult set_item_box(std::int64_t id, const ItemBox &box);
 
 private:
+	// libobs restores extra canvases with their old video info when main video is reset
+	// (Settings > Video), then emits the core "video_reset" signal.
+	static void on_video_reset(void *data, calldata_t *);
+
 	bool reset_video();
 	void set_channel(obs_source_t *scene_source);
 	void persist();
@@ -169,6 +181,8 @@ private:
 	OBSCanvas canvas_;
 	std::shared_ptr<VerticalPreviewTarget> preview_ = std::make_shared<VerticalPreviewTarget>();
 	std::function<void()> listener_;
+	// Receives queued work from libobs signals; destroying it drops what is still queued.
+	std::unique_ptr<QObject> signal_context_;
 };
 
 } // namespace multistream
