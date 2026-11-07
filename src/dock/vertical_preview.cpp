@@ -11,6 +11,8 @@
 #include <QShowEvent>
 #include <QWindow>
 
+#include <obs-module.h>
+
 #if defined(__linux__)
 #include <obs-nix-platform.h>
 #endif
@@ -24,6 +26,8 @@ constexpr double kHandleGrabRadius = 6.0;
 constexpr double kSnapDistance = 5.0;
 constexpr double kDragThreshold = 2.0;
 constexpr int kOverlayIntervalMilliseconds = 33;
+// Long past any swapchain update a retired display queued on the main thread.
+constexpr int kRetiredDisplayPurgeMilliseconds = 5000;
 
 std::optional<NudgeDirection> nudge_direction(int key)
 {
@@ -65,6 +69,10 @@ VerticalPreview::VerticalPreview(QWidget *parent) : QWidget(parent)
 	setFocusPolicy(Qt::ClickFocus);
 	overlay_timer_.setInterval(kOverlayIntervalMilliseconds);
 	connect(&overlay_timer_, &QTimer::timeout, this, &VerticalPreview::refresh_overlay);
+
+	purge_timer_.setSingleShot(true);
+	purge_timer_.setInterval(kRetiredDisplayPurgeMilliseconds);
+	connect(&purge_timer_, &QTimer::timeout, this, [this] { retired_displays_.clear(); });
 
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_StaticContents);
@@ -124,6 +132,29 @@ void VerticalPreview::release()
 	obs_display_set_enabled(display_, false);
 	obs_display_remove_draw_callback(display_, draw, this);
 	retired_displays_.push_back(std::move(display_));
+	purge_timer_.start();
+}
+
+void VerticalPreview::schedule_recreate(const char *reason)
+{
+	if (recreate_pending_) {
+		return;
+	}
+	recreate_pending_ = true;
+	QTimer::singleShot(0, this, [this, reason] {
+		recreate_pending_ = false;
+		if (!isVisible()) {
+			return;
+		}
+		// On macOS the OpenGL swapchain re-attaches to its view only when its pixel size
+		// changes, so a move to another screen at the same size leaves the view blank.
+		// A fresh display attaches to the view as it is now.
+		const QSize pixels = pixel_size();
+		blog(LOG_INFO, "[obs-multi-stream] vertical preview %s, recreating its display at %dx%d", reason,
+		     pixels.width(), pixels.height());
+		release();
+		create_display();
+	});
 }
 
 void VerticalPreview::draw(void *data, uint32_t width, uint32_t height)
@@ -149,12 +180,20 @@ void VerticalPreview::watch_window()
 	watched_window_ = window;
 	if (window != nullptr) {
 		window->installEventFilter(this);
-		connect(window, &QWindow::screenChanged, this, [this](QScreen *) {
-			if (display_ && isVisible()) {
-				const QSize pixels = pixel_size();
-				obs_display_resize(display_, static_cast<uint32_t>(pixels.width()),
-						   static_cast<uint32_t>(pixels.height()));
+		connect(window, &QWindow::screenChanged, this,
+			[this](QScreen *) { schedule_recreate("moved to another screen"); });
+		// Same as OBSQTDisplay: becoming visible again creates or resizes the display.
+		connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+			if (!visible || !isVisible()) {
+				return;
 			}
+			if (!display_) {
+				create_display();
+				return;
+			}
+			const QSize pixels = pixel_size();
+			obs_display_resize(display_, static_cast<uint32_t>(pixels.width()),
+					   static_cast<uint32_t>(pixels.height()));
 		});
 	}
 }
@@ -265,6 +304,11 @@ bool VerticalPreview::event(QEvent *event)
 			return true;
 		}
 	}
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+	if (event->type() == QEvent::DevicePixelRatioChange) {
+		schedule_recreate("changed pixel ratio");
+	}
+#endif
 	// Docking and undocking can replace the native view that the display draws into.
 	if (event->type() == QEvent::WinIdChange) {
 		release();
@@ -279,6 +323,12 @@ bool VerticalPreview::eventFilter(QObject *watched, QEvent *event)
 	    static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType() ==
 		    QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
 		release();
+	}
+	// A display lost while the window was hidden or off screen comes back once it is
+	// exposed again, without waiting for a resize.
+	if (watched == watched_window_ && event->type() == QEvent::Expose && watched_window_->isExposed() &&
+	    !display_) {
+		create_display();
 	}
 	return QWidget::eventFilter(watched, event);
 }

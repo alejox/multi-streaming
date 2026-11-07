@@ -68,6 +68,9 @@ private:
 	QSize pixel_size() const;
 	void create_display();
 	void watch_window();
+	// Recreates the display once control returns to the event loop, after a screen or
+	// pixel-ratio change has settled. Coalesces repeated requests.
+	void schedule_recreate(const char *reason);
 	PreviewMapping mapping() const;
 	Vec2 canvas_point(const QPointF &position) const;
 	PreviewInteraction::Tolerances tolerances() const;
@@ -79,9 +82,12 @@ private:
 	void nudge(NudgeDirection direction, bool shift);
 
 	OBSDisplay display_;
-	// Disabled displays retired on undock/hide, destroyed only by the destructor after any
-	// queued OpenGL swapchain update has finished. One per undock; small and bounded in use.
+	// Disabled displays retired on undock, hide, or screen change. They are destroyed only
+	// once purge_timer_ fires, which every retirement restarts, so each one is older than
+	// the delay by then and any OpenGL swapchain update it queued has long finished.
 	std::vector<OBSDisplay> retired_displays_;
+	QTimer purge_timer_;
+	bool recreate_pending_ = false;
 	QWindow *watched_window_ = nullptr;
 	// Read on the graphics thread, so only changed while no draw callback is registered.
 	std::shared_ptr<VerticalPreviewTarget> target_;
