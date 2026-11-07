@@ -15,9 +15,9 @@ remembers the session so later reconnects skip the browser.
 
 - [x] T1 Build: add Qt6::Network to the module and link `Qt6::Network`. Route: inline. Commit `b0a28b9`.
 - [x] T2 Core: vendored SHA-256, base64url, and PKCE (code verifier + S256 challenge). Route: inline (writer subagent failed). Commit `b0a28b9`.
-- [ ] T3 Core: Twitch OAuth request builders and token-response parsing (authorize URL, redirect parse, token exchange, refresh). Route: delegated. Commit ``.
-- [ ] T4 Core: Twitch Helix request builders and response parsing (users, streams/key). Route: delegated. Commit ``.
-- [ ] T5 Adapter: store/load the Twitch refresh token per destination through the existing SecretStore. Route: delegated. Commit ``.
+- [x] T3 Core: Twitch OAuth request builders and token-response parsing (authorize URL, redirect parse, token exchange, refresh). Route: inline (writer subagent failed). Commit `9cf21ff`.
+- [x] T4 Core: Twitch Helix request builders and response parsing (users, streams/key). Route: inline (writer subagent failed). Commit `9cf21ff`.
+- [x] T5 Adapter: store/load the Twitch refresh token per destination through the existing SecretStore. Route: inline (writer subagent failed). Commit `9cf21ff`.
 - [ ] T6 Dock: Qt transport — local listener on 8090, browser launch, HTTP via QNetworkAccessManager. Route: delegated. Commit ``.
 - [ ] T7 Dock: "Connect with Twitch" button and wiring; refresh-or-authorize flow fills the key and stores the token. Client ID constant (placeholder until provided). Route: delegated. Commit ``.
 - [ ] T8 Locale and docs: en-US strings for the button and status; README note. Route: inline. Commit ``.
