@@ -31,6 +31,9 @@ add_library(
   destinations/stream_stats.cpp
   destinations/validation.cpp
   destinations/vertical_settings.cpp
+  oauth/base64url.cpp
+  oauth/pkce.cpp
+  oauth/sha256.cpp
   vertical_canvas/preview_geometry.cpp
   vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp
