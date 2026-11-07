@@ -16,6 +16,8 @@ bool is_running(SessionState state);
 class Session {
 public:
 	SessionState state() const { return state_; }
+	// Text the caller already localized; empty when no reason was given, which the UI
+	// shows as an unknown failure.
 	const std::string &failure_reason() const { return failure_reason_; }
 
 	bool request_start();

@@ -72,7 +72,7 @@ bool is_valid_port(std::string_view port)
 }
 
 // Validates "host", "host:port", "[ip]", or "[ip]:port".
-std::optional<std::string> validate_authority(std::string_view authority)
+std::optional<Message> validate_authority(std::string_view authority)
 {
 	std::string_view host = authority;
 	std::string_view port;
@@ -81,11 +81,11 @@ std::optional<std::string> validate_authority(std::string_view authority)
 	if (!authority.empty() && authority.front() == '[') {
 		const auto closing = authority.find(']');
 		if (closing == std::string_view::npos || !is_valid_ip_literal(authority.substr(1, closing - 1))) {
-			return "The IP address in the server URL is invalid.";
+			return Message("Validation.IpInvalid");
 		}
 		std::string_view rest = authority.substr(closing + 1);
 		if (!rest.empty() && rest.front() != ':') {
-			return "The server URL has unexpected text after the IP address.";
+			return Message("Validation.TextAfterIp");
 		}
 		has_port = !rest.empty();
 		port = has_port ? rest.substr(1) : rest;
@@ -97,41 +97,41 @@ std::optional<std::string> validate_authority(std::string_view authority)
 			has_port = true;
 		}
 		if (!is_valid_hostname(host)) {
-			return "The server URL needs a valid host name.";
+			return Message("Validation.HostInvalid");
 		}
 	}
 
 	if (has_port && !is_valid_port(port)) {
-		return "The port in the server URL must be a number from 1 to 65535.";
+		return Message("Validation.PortInvalid");
 	}
 	return std::nullopt;
 }
 
 } // namespace
 
-std::optional<std::string> validate_server_url(std::string_view url)
+std::optional<Message> validate_server_url(std::string_view url)
 {
 	if (std::any_of(url.begin(), url.end(), is_blank_or_control)) {
-		return "The server URL must not contain spaces or control characters.";
+		return Message("Validation.UrlWhitespace");
 	}
 
 	const auto scheme_end = url.find("://");
 	if (scheme_end == std::string_view::npos) {
-		return "The server URL must start with rtmp:// or rtmps://.";
+		return Message("Validation.UrlScheme");
 	}
 	const std::string_view scheme = url.substr(0, scheme_end);
 	if (!equals_ignoring_case(scheme, "rtmp") && !equals_ignoring_case(scheme, "rtmps")) {
-		return "The server URL must start with rtmp:// or rtmps://.";
+		return Message("Validation.UrlScheme");
 	}
 
 	const std::string_view rest = url.substr(scheme_end + 3);
 	if (rest.find_first_of("?#") != std::string_view::npos) {
-		return "The server URL must not have a query or fragment. Put the stream key in its own field.";
+		return Message("Validation.UrlQuery");
 	}
 
 	const std::string_view authority = rest.substr(0, rest.find('/'));
 	if (authority.find('@') != std::string_view::npos) {
-		return "The server URL must not contain a user name or password.";
+		return Message("Validation.UrlCredentials");
 	}
 	return validate_authority(authority);
 }
@@ -141,26 +141,26 @@ std::vector<ValidationIssue> validate_destination(const Destination &destination
 	std::vector<ValidationIssue> issues;
 
 	if (!is_valid_id(destination.id)) {
-		issues.push_back({DestinationField::Id, "The destination id is invalid."});
+		issues.push_back({DestinationField::Id, Message("Validation.IdInvalid")});
 	}
 	if (std::all_of(destination.name.begin(), destination.name.end(),
 			[](char character) { return std::isspace(static_cast<unsigned char>(character)) != 0; })) {
-		issues.push_back({DestinationField::Name, "The destination needs a name."});
+		issues.push_back({DestinationField::Name, Message("Validation.NameRequired")});
 	}
 	if (auto problem = validate_server_url(destination.server_url)) {
 		issues.push_back({DestinationField::ServerUrl, std::move(*problem)});
 	}
 	if (destination.audio_track < 1 || destination.audio_track > kAudioMixCount) {
-		issues.push_back({DestinationField::AudioTrack, "The audio track must be from 1 to 6."});
+		issues.push_back({DestinationField::AudioTrack, Message("Validation.AudioTrack")});
 	}
 	if (destination.encoder.mode == EncoderMode::Custom) {
 		if (destination.encoder.video_bitrate_kbps < 1 ||
 		    destination.encoder.video_bitrate_kbps > kMaxVideoBitrateKbps) {
 			issues.push_back(
-				{DestinationField::VideoBitrate, "The video bitrate must be from 1 to 500000 kbps."});
+				{DestinationField::VideoBitrate, Message("Validation.Bitrate")});
 		}
 		if (destination.encoder.video_encoder_id.empty()) {
-			issues.push_back({DestinationField::VideoEncoder, "Choose a video encoder."});
+			issues.push_back({DestinationField::VideoEncoder, Message("Validation.EncoderRequired")});
 		}
 	}
 

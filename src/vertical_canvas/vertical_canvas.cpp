@@ -2,6 +2,7 @@
 
 #include "destinations/runtime_requirements.hpp"
 #include "persistence/vertical_settings_file.hpp"
+#include "streaming/localized_text.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -931,7 +932,7 @@ void VerticalCanvas::persist()
 {
 	remember_collection(settings_, collection_);
 	if (const auto problem = save_vertical_settings(settings_path_, settings_)) {
-		obs_log(LOG_WARNING, "%s", problem->c_str());
+		obs_log(LOG_WARNING, "%s", localize(*problem).c_str());
 	}
 }
 

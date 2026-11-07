@@ -368,15 +368,14 @@ void VerticalDock::select_item(std::optional<std::int64_t> id)
 
 void VerticalDock::set_resolution(int width, int height)
 {
-	resolution_->setText(QString("%1 x %2").arg(width).arg(height));
+	resolution_->setText(text("Vertical.ResolutionValue").arg(width).arg(height));
 }
 
 void VerticalDock::set_hidden_audio_items(int count)
 {
 	if (count > 0) {
-		audio_note_->setText(QString("%1 <a href=\"remove\">%2</a>")
-					     .arg(text("Vertical.AudioNote").toHtmlEscaped(),
-						  text("Vertical.AudioNoteRemove").toHtmlEscaped()));
+		// The text holds its own link markup, so it is set as is.
+		audio_note_->setText(text("Vertical.AudioNoteHtml"));
 	}
 	audio_note_->setVisible(count > 0);
 }

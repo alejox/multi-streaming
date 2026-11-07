@@ -21,7 +21,7 @@ std::unique_ptr<SecretStore> make_platform_secret_store()
 #elif defined(__linux__)
 	return std::make_unique<LinuxSecretStore>();
 #else
-	return std::make_unique<UnavailableSecretStore>("No secure secret store is implemented for this platform.");
+	return std::make_unique<UnavailableSecretStore>(std::string());
 #endif
 }
 

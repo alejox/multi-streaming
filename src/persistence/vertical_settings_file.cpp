@@ -26,12 +26,12 @@ VerticalSettings load_vertical_settings(const std::filesystem::path &path)
 	return read_settings(backup_path(path)).value_or(VerticalSettings{});
 }
 
-std::optional<std::string> save_vertical_settings(const std::filesystem::path &path, const VerticalSettings &settings)
+std::optional<Message> save_vertical_settings(const std::filesystem::path &path, const VerticalSettings &settings)
 {
 	std::error_code error;
 	std::filesystem::create_directories(path.parent_path(), error);
 	if (error) {
-		return "Could not create " + path.parent_path().u8string() + ": " + error.message();
+		return Message("Storage.CreateDirFailed", {path.parent_path().u8string(), error.message()});
 	}
 	return replace_file_keeping_backup(path, encode_vertical_settings(settings));
 }

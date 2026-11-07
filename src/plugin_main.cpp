@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "dock/vertical_dock.hpp"
 #include "persistence/file_config_repository.hpp"
 #include "secrets/platform_secret_store.hpp"
+#include "streaming/localized_text.hpp"
 #include "streaming/streaming_engine.hpp"
 #include "vertical_canvas/vertical_canvas.hpp"
 
@@ -198,7 +199,7 @@ void activate_features()
 
 	multistream::ConfigLoad load = composition->repository.load();
 	if (load.problem) {
-		obs_log(LOG_ERROR, "%s", load.problem->c_str());
+		obs_log(LOG_ERROR, "%s", multistream::localize(*load.problem).c_str());
 	}
 	obs_log(LOG_INFO, "loaded %zu destinations", load.config.destinations.size());
 
@@ -212,7 +213,7 @@ void activate_features()
 	} else {
 		prevent_dock_minimize(dock);
 		if (load.problem) {
-			dock->show_problem(QString::fromStdString(*load.problem));
+			dock->show_problem(QString::fromStdString(multistream::localize(*load.problem)));
 		}
 		composition->controller = std::make_unique<multistream::DockController>(
 			std::move(load.config), composition->repository, composition->secrets, composition->engine,

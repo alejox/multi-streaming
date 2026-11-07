@@ -7,6 +7,7 @@
 #include "dock/destination_editor_dialog.hpp"
 #include "dock/icons.hpp"
 #include "oauth/twitch_token_store.hpp"
+#include "streaming/localized_text.hpp"
 #include "streaming/main_stream_encoders.hpp"
 
 #include <obs-module.h>
@@ -172,7 +173,7 @@ void DockController::delete_destination(const QString &id)
 	const std::string destination_id = id.toStdString();
 	const RemovalResult result = remove_destination_entry(config_, repository_, destination_id);
 	if (result.config_error && dock_) {
-		dock_->show_problem(QString::fromStdString(*result.config_error));
+		dock_->show_problem(QString::fromStdString(localize(*result.config_error)));
 	}
 	if (!result.removed) {
 		return;
@@ -189,7 +190,7 @@ void DockController::delete_destination(const QString &id)
 		[this](std::optional<SecretError> error) {
 			if (error && dock_) {
 				dock_->show_problem(
-					text("Dock.KeyNotDeleted").arg(QString::fromStdString(error->message)));
+					text("Dock.KeyNotDeleted").arg(QString::fromStdString(localize(*error))));
 			}
 		});
 }
@@ -218,7 +219,7 @@ void DockController::move_destination_to(const QString &id, int insert_position)
 	const auto error = repository_.save(updated);
 	if (error) {
 		if (dock_) {
-			dock_->show_problem(QString::fromStdString(*error));
+			dock_->show_problem(QString::fromStdString(localize(*error)));
 		}
 		return;
 	}
@@ -238,7 +239,7 @@ void DockController::set_color_icons(bool on)
 	const auto error = repository_.save(updated);
 	if (error) {
 		if (dock_) {
-			dock_->show_problem(QString::fromStdString(*error));
+			dock_->show_problem(QString::fromStdString(localize(*error)));
 			dock_->set_color_icons(config_.color_icons);
 		}
 		return;
@@ -268,7 +269,7 @@ void DockController::save(const Destination &destination, const std::optional<st
 			  const std::optional<std::string> &refresh_token, DestinationEditorDialog::SaveDone done)
 {
 	if (const auto error = save_destination_entry(config_, repository_, destination)) {
-		done(QString::fromStdString(*error));
+		done(QString::fromStdString(localize(*error)));
 		return;
 	}
 
@@ -298,7 +299,7 @@ void DockController::save(const Destination &destination, const std::optional<st
 		},
 		[done = std::move(done)](std::optional<SecretError> error) {
 			if (error) {
-				done(text("Editor.KeyNotStored").arg(QString::fromStdString(error->message)));
+				done(text("Editor.KeyNotStored").arg(QString::fromStdString(localize(*error))));
 			} else {
 				done(std::nullopt);
 			}

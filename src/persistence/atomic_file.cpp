@@ -71,12 +71,12 @@ HANDLE create_temporary_file(const fs::path &path, fs::path &temp_path)
 // Atomically replaces the file with a flushed copy of the content. On failure the previous
 // file is untouched. MOVEFILE_WRITE_THROUGH returns once the move is on disk, which makes a
 // separate directory sync unnecessary.
-std::optional<std::string> replace_file(const fs::path &path, const std::string &content)
+std::optional<Message> replace_file(const fs::path &path, const std::string &content)
 {
 	fs::path temp_path;
 	HANDLE file = create_temporary_file(path, temp_path);
 	if (file == INVALID_HANDLE_VALUE) {
-		return "Could not create a temporary file next to " + display(path) + ": " + last_error_text();
+		return Message("Storage.TempCreateFailed", {display(path), last_error_text()});
 	}
 
 	const bool written = write_and_flush(file, content);
@@ -84,13 +84,13 @@ std::optional<std::string> replace_file(const fs::path &path, const std::string 
 	CloseHandle(file);
 	if (!written) {
 		DeleteFileW(temp_path.c_str());
-		return "Could not write " + display(temp_path) + ": " + write_error;
+		return Message("Storage.WriteFailed", {display(temp_path), write_error});
 	}
 
 	if (!MoveFileExW(temp_path.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
 		const std::string move_error = last_error_text();
 		DeleteFileW(temp_path.c_str());
-		return "Could not replace " + display(path) + ": " + move_error;
+		return Message("Storage.ReplaceFailed", {display(path), move_error});
 	}
 	return std::nullopt;
 }
@@ -130,13 +130,13 @@ void sync_directory(const fs::path &directory)
 
 // Atomically replaces the file with a synced copy of the content. On failure the previous
 // file is untouched.
-std::optional<std::string> replace_file(const fs::path &path, const std::string &content)
+std::optional<Message> replace_file(const fs::path &path, const std::string &content)
 {
 	// mkstemp creates the file with mode 0600, and the rename keeps that mode.
 	std::string temp_path = display(path) + ".tmp-XXXXXX";
 	const int descriptor = mkstemp(temp_path.data());
 	if (descriptor < 0) {
-		return "Could not create a temporary file next to " + display(path) + ": " + errno_text();
+		return Message("Storage.TempCreateFailed", {display(path), errno_text()});
 	}
 
 	const bool written = write_and_sync(descriptor, content);
@@ -144,13 +144,13 @@ std::optional<std::string> replace_file(const fs::path &path, const std::string 
 	close(descriptor);
 	if (!written) {
 		unlink(temp_path.c_str());
-		return "Could not write " + temp_path + ": " + write_error;
+		return Message("Storage.WriteFailed", {temp_path, write_error});
 	}
 
 	if (std::rename(temp_path.c_str(), path.c_str()) != 0) {
 		const std::string rename_error = errno_text();
 		unlink(temp_path.c_str());
-		return "Could not replace " + display(path) + ": " + rename_error;
+		return Message("Storage.ReplaceFailed", {display(path), rename_error});
 	}
 
 	sync_directory(path.parent_path());
@@ -178,7 +178,7 @@ bool read_whole_file(const fs::path &path, std::string &content)
 	return !file.bad();
 }
 
-std::optional<std::string> replace_file_keeping_backup(const fs::path &path, const std::string &content)
+std::optional<Message> replace_file_keeping_backup(const fs::path &path, const std::string &content)
 {
 	// The backup is a full synced copy rather than a rename of the current file, so the
 	// target exists at every moment and a crash in between leaves both files usable.
@@ -186,7 +186,7 @@ std::optional<std::string> replace_file_keeping_backup(const fs::path &path, con
 	if (fs::is_regular_file(path, error)) {
 		std::string previous;
 		if (!read_whole_file(path, previous)) {
-			return "Could not read " + display(path) + " to back it up";
+			return Message("Storage.BackupReadFailed", {display(path)});
 		}
 		if (auto problem = replace_file(backup_path(path), previous)) {
 			return problem;

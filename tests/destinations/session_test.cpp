@@ -83,12 +83,13 @@ TEST_CASE(failure_keeps_its_reason_until_the_next_start)
 	CHECK(session.failure_reason().empty());
 }
 
-TEST_CASE(failure_without_a_reason_gets_a_placeholder)
+TEST_CASE(failure_without_a_reason_still_fails_and_leaves_the_text_to_the_ui)
 {
 	Session session;
 	REQUIRE(session.request_start());
 	CHECK(session.fail(""));
-	CHECK(!session.failure_reason().empty());
+	CHECK(session.state() == SessionState::Failed);
+	CHECK(session.failure_reason().empty());
 }
 
 TEST_CASE(failure_during_stop_is_not_swallowed)

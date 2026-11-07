@@ -11,10 +11,10 @@ namespace {
 class FakeRepository final : public ConfigRepository {
 public:
 	ConfigLoad load() override { return {saved, std::nullopt}; }
-	std::optional<std::string> save(const DestinationsConfig &config) override
+	std::optional<Message> save(const DestinationsConfig &config) override
 	{
 		if (fail_saves) {
-			return "disk full";
+			return Message("Storage.WriteFailed", {"destinations.json", "disk full"});
 		}
 		saved = config;
 		return std::nullopt;
@@ -49,7 +49,8 @@ TEST_CASE(a_key_with_whitespace_is_rejected_without_echoing_it)
 {
 	const auto problem = validate_stream_key_entry("live abc\n", false);
 	REQUIRE(problem.has_value());
-	CHECK(problem->find("live") == std::string::npos);
+	CHECK_EQ(problem->key, std::string("Validation.KeyWhitespace"));
+	CHECK(problem->args.empty());
 }
 
 TEST_CASE(adds_a_new_destination_and_stores_its_key)

@@ -10,7 +10,7 @@ namespace multistream {
 
 struct RemovalResult {
 	bool removed = false;
-	std::optional<std::string> config_error;
+	std::optional<Message> config_error;
 	std::optional<SecretError> secret_error;
 };
 

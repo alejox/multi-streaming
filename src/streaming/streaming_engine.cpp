@@ -4,6 +4,7 @@
 #include "destinations/reconnect_history.hpp"
 #include "destinations/session_selection.hpp"
 #include "destinations/validation.hpp"
+#include "streaming/localized_text.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -344,7 +345,7 @@ void StreamingEngine::finish_start(std::uint64_t ticket, const EncoderAssignment
 
 	std::optional<std::string> failure = start_blocker(slot->destination);
 	if (!failure && key.error) {
-		failure = key.error->message;
+		failure = localize(*key.error);
 	}
 	if (!failure && !key.secret) {
 		failure = std::string(obs_module_text("Failure.NoStreamKey"));
@@ -580,7 +581,7 @@ std::optional<std::string> StreamingEngine::start_blocker(const Destination &des
 {
 	const std::vector<ValidationIssue> issues = validate_destination(destination);
 	if (!issues.empty()) {
-		return issues.front().message;
+		return localize(issues.front().message);
 	}
 	if (video_sources_.video_for(destination.video_source) == nullptr) {
 		return std::string(obs_module_text(destination.video_source == VideoSource::Vertical
@@ -810,6 +811,9 @@ DestinationStatus StreamingEngine::status_of(const Slot &slot)
 		const std::lock_guard<std::mutex> lock(slot.session_mutex);
 		status.state = slot.session.state();
 		status.failure_reason = slot.session.failure_reason();
+		if (status.state == SessionState::Failed && status.failure_reason.empty()) {
+			status.failure_reason = obs_module_text("Failure.Unknown");
+		}
 		status.reconnect_attempt = slot.reconnects.attempt();
 		status.flapping = slot.reconnects.flapping(now_seconds());
 	}

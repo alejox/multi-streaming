@@ -5,11 +5,11 @@
 
 namespace multistream {
 
-std::optional<std::string> validate_stream_key_entry(std::string_view entered, bool is_new_destination)
+std::optional<Message> validate_stream_key_entry(std::string_view entered, bool is_new_destination)
 {
 	if (entered.empty()) {
 		if (is_new_destination) {
-			return "A stream key is required";
+			return Message("Validation.KeyRequired");
 		}
 		return std::nullopt;
 	}
@@ -18,12 +18,12 @@ std::optional<std::string> validate_stream_key_entry(std::string_view entered, b
 		return std::isspace(character) != 0;
 	});
 	if (has_whitespace) {
-		return "A stream key cannot contain whitespace";
+		return Message("Validation.KeyWhitespace");
 	}
 	return std::nullopt;
 }
 
-std::optional<std::string> save_destination_entry(DestinationsConfig &config, ConfigRepository &repository,
+std::optional<Message> save_destination_entry(DestinationsConfig &config, ConfigRepository &repository,
 						  const Destination &destination)
 {
 	DestinationsConfig updated = config;

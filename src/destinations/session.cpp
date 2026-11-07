@@ -87,7 +87,7 @@ bool Session::fail(std::string reason)
 		return false;
 	}
 	state_ = SessionState::Failed;
-	failure_reason_ = reason.empty() ? "Unknown failure" : std::move(reason);
+	failure_reason_ = std::move(reason);
 	return true;
 }
 

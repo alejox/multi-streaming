@@ -198,7 +198,9 @@ TEST_CASE(corrupt_file_is_preserved_aside_and_reported)
 
 	CHECK(load.config.destinations.empty());
 	REQUIRE(load.problem.has_value());
-	CHECK(load.problem->find("destinations.json.corrupt-1") != std::string::npos);
+	CHECK_EQ(load.problem->key, std::string("Config.UnusableReset"));
+	REQUIRE(load.problem->args.size() == 2);
+	CHECK(load.problem->args[1].find("destinations.json.corrupt-1") != std::string::npos);
 	CHECK(!fs::exists(path));
 	CHECK_EQ(read_file(directory.path() / "destinations.json.corrupt-1"), "{not json");
 }
@@ -240,7 +242,9 @@ TEST_CASE(newer_schema_is_preserved_aside_and_reported)
 	const ConfigLoad load = FileConfigRepository(path).load();
 
 	REQUIRE(load.problem.has_value());
-	CHECK(load.problem->find("newer") != std::string::npos);
+	CHECK_EQ(load.problem->key, std::string("Config.UnusableReset"));
+	REQUIRE(!load.problem->args.empty());
+	CHECK(load.problem->args[0].find("newer") != std::string::npos);
 	CHECK_EQ(read_file(directory.path() / "destinations.json.corrupt-1"), newer);
 }
 
@@ -341,7 +345,7 @@ TEST_CASE(a_corrupt_file_is_preserved_and_the_backup_is_restored)
 
 	CHECK(load.config == sample_config());
 	REQUIRE(load.problem.has_value());
-	CHECK(load.problem->find("backup") != std::string::npos);
+	CHECK_EQ(load.problem->key, std::string("Config.UnusableRestored"));
 	CHECK_EQ(read_file(directory.path() / "destinations.json.corrupt-1"), "{not json");
 	CHECK(!repository.save(load.config).has_value());
 }
@@ -362,7 +366,7 @@ TEST_CASE(a_missing_file_is_restored_from_the_backup)
 
 	CHECK(load.config == sample_config());
 	REQUIRE(load.problem.has_value());
-	CHECK(load.problem->find("backup") != std::string::npos);
+	CHECK_EQ(load.problem->key, std::string("Config.RestoredMissing"));
 }
 
 TEST_CASE(an_unusable_backup_is_ignored)

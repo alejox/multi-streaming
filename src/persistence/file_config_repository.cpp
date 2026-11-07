@@ -53,7 +53,7 @@ std::optional<DestinationsConfig> read_backup(const fs::path &path)
 
 } // namespace
 
-ConfigLoad FileConfigRepository::refuse_saving(std::string problem)
+ConfigLoad FileConfigRepository::refuse_saving(Message problem)
 {
 	safe_to_save_ = false;
 	return {{}, std::move(problem)};
@@ -64,26 +64,22 @@ ConfigLoad FileConfigRepository::load()
 	std::error_code error;
 	const fs::file_status status = fs::symlink_status(path_, error);
 	if (error && status.type() != fs::file_type::not_found) {
-		return refuse_saving("The destinations config at " + display(path_) +
-				     " could not be checked: " + error.message() + ". Saving is disabled.");
+		return refuse_saving(Message("Config.CheckFailed", {display(path_), error.message()}));
 	}
 	if (status.type() == fs::file_type::not_found) {
 		safe_to_save_ = true;
 		if (auto backup = read_backup(path_)) {
-			return {std::move(*backup), "The destinations config at " + display(path_) +
-							    " was missing. The previous version was restored from its backup."};
+			return {std::move(*backup), Message("Config.RestoredMissing", {display(path_)})};
 		}
 		return {};
 	}
 
 	std::string content;
 	if (!fs::is_regular_file(status) && !fs::is_symlink(status)) {
-		return refuse_saving("The destinations config at " + display(path_) +
-				     " is not a regular file. Saving is disabled.");
+		return refuse_saving(Message("Config.NotRegularFile", {display(path_)}));
 	}
 	if (!read_whole_file(path_, content)) {
-		return refuse_saving("The destinations config at " + display(path_) +
-				     " could not be read. It was left in place and saving is disabled.");
+		return refuse_saving(Message("Config.ReadFailed", {display(path_)}));
 	}
 
 	auto decoded = decode_config(content);
@@ -95,33 +91,27 @@ ConfigLoad FileConfigRepository::load()
 	const ConfigError &config_error = std::get<ConfigError>(decoded);
 	const fs::path preserved = move_aside(path_);
 	if (preserved.empty()) {
-		return refuse_saving("The destinations config at " + display(path_) +
-				     " is unusable (" + config_error.detail +
-				     ") and could not be moved aside. It was left in place and saving is disabled.");
+		return refuse_saving(Message("Config.UnusableKept", {display(path_), config_error.detail}));
 	}
 
 	safe_to_save_ = true;
 	if (auto backup = read_backup(path_)) {
-		return {std::move(*backup), "The destinations config was unusable (" + config_error.detail +
-						    "). It was preserved at " + display(preserved) +
-						    " and the previous version was restored from its backup."};
+		return {std::move(*backup),
+			Message("Config.UnusableRestored", {config_error.detail, display(preserved)})};
 	}
-	return {{},
-		"The destinations config was unusable (" + config_error.detail + "). It was preserved at " +
-			display(preserved) + " and the plugin started with no destinations."};
+	return {{}, Message("Config.UnusableReset", {config_error.detail, display(preserved)})};
 }
 
-std::optional<std::string> FileConfigRepository::save(const DestinationsConfig &config)
+std::optional<Message> FileConfigRepository::save(const DestinationsConfig &config)
 {
 	if (!safe_to_save_) {
-		return "Saving is disabled because the existing destinations config at " + display(path_) +
-		       " has not been loaded successfully.";
+		return Message("Config.SavingDisabled", {display(path_)});
 	}
 
 	std::error_code error;
 	fs::create_directories(path_.parent_path(), error);
 	if (error) {
-		return "Could not create " + display(path_.parent_path()) + ": " + error.message();
+		return Message("Storage.CreateDirFailed", {display(path_.parent_path()), error.message()});
 	}
 
 	return replace_file_keeping_backup(path_, encode_config(config));

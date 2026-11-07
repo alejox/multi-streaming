@@ -17,10 +17,10 @@ public:
 	ConfigLoad load() override;
 
 	// Refused until load() has confirmed that nothing at the path would be lost.
-	std::optional<std::string> save(const DestinationsConfig &config) override;
+	std::optional<Message> save(const DestinationsConfig &config) override;
 
 private:
-	ConfigLoad refuse_saving(std::string problem);
+	ConfigLoad refuse_saving(Message problem);
 
 	std::filesystem::path path_;
 	bool safe_to_save_ = false;

@@ -6,6 +6,7 @@
 #include "oauth/twitch_connect_flow.hpp"
 #include "oauth/twitch_token_store.hpp"
 #include "secrets/secret_worker.hpp"
+#include "streaming/localized_text.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -157,7 +158,7 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	field_errors_[DestinationField::VideoEncoder] = add_field(form, "Editor.Encoder", encoder_id_);
 
 	bitrate_ = new_spin_box(0, kMaxBitrateKbps, initial.encoder.video_bitrate_kbps, this);
-	bitrate_->setSuffix(" kbps");
+	bitrate_->setSuffix(QStringLiteral(" ") + QString::fromUtf8(obs_module_text("Unit.Kbps")));
 	field_errors_[DestinationField::VideoBitrate] = add_field(form, "Editor.Bitrate", bitrate_);
 
 	audio_track_ = new_spin_box(1, kAudioTracks, initial.audio_track, this);
@@ -176,7 +177,7 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	add_field(form, "Editor.ReconnectRetries", reconnect_retries_);
 
 	reconnect_delay_ = new_spin_box(1, kMaxReconnectDelaySeconds, initial.reconnect.base_delay_seconds(), this);
-	reconnect_delay_->setSuffix(" s");
+	reconnect_delay_->setSuffix(QStringLiteral(" ") + QString::fromUtf8(obs_module_text("Unit.Seconds")));
 	reconnect_delay_->setToolTip(obs_module_text("Editor.ReconnectDelayHint"));
 	add_field(form, "Editor.ReconnectDelay", reconnect_delay_);
 
@@ -210,16 +211,16 @@ void DestinationEditorDialog::accept()
 	for (const ValidationIssue &issue : validate_destination(destination)) {
 		const auto label = field_errors_.find(issue.field);
 		if (label != field_errors_.end()) {
-			show_error(label->second, QString::fromStdString(issue.message));
+			show_error(label->second, QString::fromStdString(localize(issue.message)));
 		} else {
-			show_error(save_error_, QString::fromStdString(issue.message));
+			show_error(save_error_, QString::fromStdString(localize(issue.message)));
 		}
 		valid = false;
 	}
 
 	const std::string entered_key = key_->text().trimmed().toStdString();
 	if (const auto problem = validate_stream_key_entry(entered_key, is_new_)) {
-		show_error(key_error_, QString::fromStdString(*problem));
+		show_error(key_error_, QString::fromStdString(localize(*problem)));
 		valid = false;
 	}
 	if (!valid) {

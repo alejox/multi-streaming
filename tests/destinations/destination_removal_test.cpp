@@ -11,10 +11,10 @@ namespace {
 class FakeRepository final : public ConfigRepository {
 public:
 	ConfigLoad load() override { return {saved, std::nullopt}; }
-	std::optional<std::string> save(const DestinationsConfig &config) override
+	std::optional<Message> save(const DestinationsConfig &config) override
 	{
 		if (fail_saves) {
-			return "disk full";
+			return Message("Storage.WriteFailed", {"destinations.json", "disk full"});
 		}
 		saved = config;
 		return std::nullopt;

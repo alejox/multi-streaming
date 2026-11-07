@@ -131,3 +131,36 @@ TEST_CASE(generated_ids_are_valid_and_distinct)
 	}
 	CHECK_EQ(ids.size(), std::size_t{100});
 }
+
+TEST_CASE(url_problems_are_reported_as_locale_keys_without_echoing_the_url)
+{
+	const auto key_of = [](const char *url) {
+		const auto problem = validate_server_url(url);
+		return problem ? problem->key + (problem->args.empty() ? "" : " with args") : std::string("none");
+	};
+	CHECK_EQ(key_of("http://example.com/live"), std::string("Validation.UrlScheme"));
+	CHECK_EQ(key_of("rtmp://example.com/live?key=secret"), std::string("Validation.UrlQuery"));
+	CHECK_EQ(key_of("rtmp://user:secret@example.com/live"), std::string("Validation.UrlCredentials"));
+	CHECK_EQ(key_of("rtmp://exa mple.com/live"), std::string("Validation.UrlWhitespace"));
+	CHECK_EQ(key_of("rtmp://example.com:0/live"), std::string("Validation.PortInvalid"));
+	CHECK_EQ(key_of("rtmp://[zz]/live"), std::string("Validation.IpInvalid"));
+	CHECK_EQ(key_of("rtmp://[::1]x/live"), std::string("Validation.TextAfterIp"));
+	CHECK_EQ(key_of("rtmp://exa$mple.com/live"), std::string("Validation.HostInvalid"));
+}
+
+TEST_CASE(destination_problems_are_reported_as_locale_keys)
+{
+	Destination destination = valid_destination();
+	destination.name = " ";
+	destination.audio_track = 7;
+	destination.encoder.mode = EncoderMode::Custom;
+	destination.encoder.video_bitrate_kbps = 0;
+	destination.encoder.video_encoder_id.clear();
+
+	std::set<std::string> keys;
+	for (const ValidationIssue &issue : validate_destination(destination)) {
+		keys.insert(issue.message.key);
+	}
+	CHECK(keys == (std::set<std::string>{"Validation.NameRequired", "Validation.AudioTrack", "Validation.Bitrate",
+					     "Validation.EncoderRequired"}));
+}

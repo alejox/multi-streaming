@@ -1,6 +1,7 @@
 #pragma once
 
 #include "destinations/destination.hpp"
+#include "destinations/message.hpp"
 
 #include <optional>
 #include <string>
@@ -13,13 +14,13 @@ enum class DestinationField { Id, Name, ServerUrl, VideoBitrate, VideoEncoder, A
 
 struct ValidationIssue {
 	DestinationField field;
-	std::string message;
+	Message message;
 };
 
 // Returns why the URL is unusable, or nothing when it is valid. The scheme must be
 // rtmp or rtmps. Userinfo, query, and fragment are rejected because the URL is
 // stored in plain JSON and must never carry a credential; the key has its own field.
-std::optional<std::string> validate_server_url(std::string_view url);
+std::optional<Message> validate_server_url(std::string_view url);
 
 std::vector<ValidationIssue> validate_destination(const Destination &destination);
 

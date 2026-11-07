@@ -11,17 +11,17 @@ namespace multistream {
 
 // Why an entered stream key cannot be used, or nothing when it can. A blank entry means
 // "keep the stored key", which only an existing destination has. Never contains the key.
-std::optional<std::string> validate_stream_key_entry(std::string_view entered, bool is_new_destination);
+std::optional<Message> validate_stream_key_entry(std::string_view entered, bool is_new_destination);
 
 struct SaveResult {
 	bool saved = false;
-	std::optional<std::string> config_error;
+	std::optional<Message> config_error;
 	std::optional<SecretError> secret_error;
 };
 
 // Adds the destination, or replaces the one with its id, and saves the config. A failed
 // save changes nothing. Keys are left for the caller, which stores them off the UI thread.
-std::optional<std::string> save_destination_entry(DestinationsConfig &config, ConfigRepository &repository,
+std::optional<Message> save_destination_entry(DestinationsConfig &config, ConfigRepository &repository,
 						  const Destination &destination);
 
 // Whether a refresh token from a Twitch connect is stored although the editor was

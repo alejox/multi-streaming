@@ -10,6 +10,8 @@ struct SecretError {
 	enum class Kind { Unavailable, AccessDenied, Failure };
 
 	Kind kind;
+	// The store's own error text, such as a system error code. The UI puts a translated
+	// summary of the kind before it. May be empty.
 	std::string message;
 };
 

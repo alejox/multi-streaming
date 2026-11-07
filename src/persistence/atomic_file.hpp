@@ -8,6 +8,8 @@
 // also linked into the standalone tests, which build without OBS.
 #pragma once
 
+#include "destinations/message.hpp"
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -22,7 +24,7 @@ bool read_whole_file(const std::filesystem::path &path, std::string &content);
 // Atomically replaces the file with a synced copy of the content, which is private to the
 // user on POSIX. The file's previous content first becomes the backup. On failure the
 // file is untouched and the message says what went wrong.
-std::optional<std::string> replace_file_keeping_backup(const std::filesystem::path &path,
+std::optional<Message> replace_file_keeping_backup(const std::filesystem::path &path,
 						       const std::string &content);
 
 } // namespace multistream

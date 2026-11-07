@@ -2,6 +2,7 @@
 // previous version, which loading falls back to.
 #pragma once
 
+#include "destinations/message.hpp"
 #include "destinations/vertical_settings.hpp"
 
 #include <filesystem>
@@ -12,7 +13,7 @@ namespace multistream {
 // stopping for.
 VerticalSettings load_vertical_settings(const std::filesystem::path &path);
 
-// Returns a description of the problem, if any.
-std::optional<std::string> save_vertical_settings(const std::filesystem::path &path, const VerticalSettings &settings);
+// Returns what went wrong, if anything.
+std::optional<Message> save_vertical_settings(const std::filesystem::path &path, const VerticalSettings &settings);
 
 } // namespace multistream

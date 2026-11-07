@@ -2,6 +2,7 @@
 #pragma once
 
 #include "destinations/destination.hpp"
+#include "destinations/message.hpp"
 
 #include <optional>
 #include <string>
@@ -14,7 +15,7 @@ struct ConfigLoad {
 
 	// Set when an existing config could not be used. Explains what happened and
 	// where the original was preserved, for the user to see.
-	std::optional<std::string> problem;
+	std::optional<Message> problem;
 };
 
 class ConfigRepository {
@@ -23,8 +24,8 @@ public:
 
 	virtual ConfigLoad load() = 0;
 
-	// Returns an error message when the config could not be saved.
-	virtual std::optional<std::string> save(const DestinationsConfig &config) = 0;
+	// Returns what went wrong when the config could not be saved.
+	virtual std::optional<Message> save(const DestinationsConfig &config) = 0;
 };
 
 } // namespace multistream
