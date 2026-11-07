@@ -84,6 +84,7 @@ private:
 	void update_key_link();
 	void update_connect_visibility();
 	void toggle_key_visibility();
+	void update_key_action();
 	void set_advanced_expanded(bool expanded);
 	void fit_to_contents();
 	void connect_twitch();

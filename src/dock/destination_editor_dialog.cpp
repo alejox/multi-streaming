@@ -19,6 +19,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -149,8 +150,10 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	key_->setEchoMode(QLineEdit::Password);
 	key_->setPlaceholderText(text(is_new ? "Editor.KeyRequired" : "Editor.KeyUnchanged"));
 	show_key_ = key_->addAction(themed_icon("icons/ui/visible.svg", palette()), QLineEdit::TrailingPosition);
-	show_key_->setText(text("Editor.ShowKey"));
-	show_key_->setToolTip(text("Editor.ShowKey"));
+	// A line edit's actions take no keyboard focus, so a shortcut on the field reveals too.
+	show_key_->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_H));
+	show_key_->setShortcutContext(Qt::WidgetShortcut);
+	update_key_action();
 	connect(show_key_, &QAction::triggered, this, &DestinationEditorDialog::toggle_key_visibility);
 	key_row_ = add_field(connection_form_, "Editor.Key", key_);
 	connect(key_, &QLineEdit::textEdited, this, [this] { clear_error(key_row_); });
@@ -611,11 +614,19 @@ void DestinationEditorDialog::toggle_key_visibility()
 {
 	key_shown_ = !key_shown_;
 	key_->setEchoMode(key_shown_ ? QLineEdit::Normal : QLineEdit::Password);
+	update_key_action();
+}
+
+void DestinationEditorDialog::update_key_action()
+{
 	show_key_->setIcon(themed_icon(key_shown_ ? "icons/ui/hidden.svg" : "icons/ui/visible.svg", palette()));
 	const QString action = text(key_shown_ ? "Editor.HideKey" : "Editor.ShowKey");
 	// The action's text is its accessible name in the line edit's tool button.
 	show_key_->setText(action);
-	show_key_->setToolTip(action);
+	const QString hint = text("Editor.KeyShortcutHint")
+				     .arg(action, show_key_->shortcut().toString(QKeySequence::NativeText));
+	show_key_->setToolTip(hint);
+	key_->setToolTip(hint);
 }
 
 void DestinationEditorDialog::set_advanced_expanded(bool expanded)

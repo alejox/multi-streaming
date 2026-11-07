@@ -407,7 +407,7 @@ DestinationRowStatus DockController::row_status(const DestinationStatus &status)
 	row.tone = tone_of(status.state);
 	row.detail = QString::fromStdString(status.failure_reason);
 	if (status.flapping) {
-		row.warning = text("Dock.FlappingWarning");
+		row.warning = text("Dock.FlappingWarning").arg(status.recent_drops);
 		row.warning_hint = text("Dock.FlappingHint");
 	}
 	row.can_start = actions.can_start;

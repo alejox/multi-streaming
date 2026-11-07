@@ -22,6 +22,8 @@ public:
 	// The current retry, counted from 1. 0 while connected.
 	int attempt() const { return attempt_; }
 
+	// Drops within the last kFlappingWindowSeconds.
+	int recent_drops(double now_seconds) const;
 	bool flapping(double now_seconds) const;
 
 private:

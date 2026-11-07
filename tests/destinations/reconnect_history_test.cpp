@@ -81,3 +81,39 @@ TEST_CASE(reset_forgets_everything)
 	CHECK_EQ(history.attempt(), 0);
 	CHECK(!history.flapping(31.0));
 }
+
+TEST_CASE(recent_drops_counts_every_drop_in_the_window)
+{
+	ReconnectHistory history;
+	CHECK_EQ(history.recent_drops(0.0), 0);
+	for (int drop = 0; drop < 42; ++drop) {
+		history.retry_scheduled(drop * 8.0);
+		history.connected();
+	}
+	// Drops at 216 s to 328 s are within two minutes of 336 s.
+	CHECK_EQ(history.recent_drops(42 * 8.0), 15);
+}
+
+TEST_CASE(recent_drops_forget_drops_older_than_the_window)
+{
+	ReconnectHistory history;
+	for (int drop = 0; drop < 3; ++drop) {
+		history.retry_scheduled(drop * 10.0);
+		history.connected();
+	}
+	CHECK_EQ(history.recent_drops(20.0), 3);
+	CHECK_EQ(history.recent_drops(135.0), 1);
+	CHECK(!history.flapping(135.0));
+	CHECK_EQ(history.recent_drops(500.0), 0);
+}
+
+TEST_CASE(retries_of_one_outage_count_as_one_recent_drop)
+{
+	ReconnectHistory history;
+	for (int retry = 0; retry < 5; ++retry) {
+		history.retry_scheduled(retry * 2.0);
+	}
+	CHECK_EQ(history.recent_drops(10.0), 1);
+	history.reset();
+	CHECK_EQ(history.recent_drops(10.0), 0);
+}

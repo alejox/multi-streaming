@@ -824,7 +824,9 @@ DestinationStatus StreamingEngine::status_of(const Slot &slot)
 			status.failure_reason = obs_module_text("Failure.Unknown");
 		}
 		status.reconnect_attempt = slot.reconnects.attempt();
-		status.flapping = slot.reconnects.flapping(now_seconds());
+		const double now = now_seconds();
+		status.flapping = slot.reconnects.flapping(now);
+		status.recent_drops = slot.reconnects.recent_drops(now);
 		if (status.state == SessionState::Reconnecting) {
 			status.retry_in_seconds = seconds_until(slot.retry_deadline_ns, now_ns());
 		}

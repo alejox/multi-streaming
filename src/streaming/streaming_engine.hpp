@@ -54,6 +54,8 @@ struct DestinationStatus {
 	// Seconds until libobs tries that retry; 0 while it is being tried or none is scheduled.
 	int retry_in_seconds = 0;
 	bool flapping = false;
+	// Drops in the flapping window, for showing how unstable the connection is.
+	int recent_drops = 0;
 };
 
 class StreamingEngine {
