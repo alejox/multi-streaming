@@ -13,17 +13,17 @@
 #include <QTcpSocket>
 #include <QUrl>
 
+#include <cstdint>
 #include <utility>
 
 namespace multistream {
 
-TwitchConnectFlow::TwitchConnectFlow(std::string client_id, std::string redirect_uri, QObject *parent)
+TwitchConnectFlow::TwitchConnectFlow(std::string client_id, std::vector<std::string> redirect_uris, QObject *parent)
 	: QObject(parent),
 	  client_id_(std::move(client_id)),
-	  redirect_uri_(std::move(redirect_uri))
+	  redirect_uris_(std::move(redirect_uris))
 {
 	network_ = new QNetworkAccessManager(this);
-	port_ = static_cast<std::uint16_t>(QUrl(QString::fromStdString(redirect_uri_)).port());
 }
 
 void TwitchConnectFlow::start(const std::optional<std::string> &refresh_token)
@@ -36,25 +36,37 @@ void TwitchConnectFlow::start(const std::optional<std::string> &refresh_token)
 	}
 }
 
-bool TwitchConnectFlow::start_listener()
+bool TwitchConnectFlow::bind_listener()
 {
-	listener_ = new QTcpServer(this);
-	connect(listener_, &QTcpServer::newConnection, this,
-		[this] { handle_connection(listener_->nextPendingConnection()); });
-	return listener_->listen(QHostAddress::LocalHost, port_);
+	for (const std::string &uri : redirect_uris_) {
+		const std::uint16_t port = static_cast<std::uint16_t>(QUrl(QString::fromStdString(uri)).port());
+		if (port == 0) {
+			continue;
+		}
+		QTcpServer *candidate = new QTcpServer(this);
+		if (candidate->listen(QHostAddress::LocalHost, port)) {
+			listener_ = candidate;
+			active_redirect_uri_ = uri;
+			connect(listener_, &QTcpServer::newConnection, this,
+				[this] { handle_connection(listener_->nextPendingConnection()); });
+			return true;
+		}
+		delete candidate;
+	}
+	return false;
 }
 
 void TwitchConnectFlow::start_browser_flow()
 {
 	code_verifier_ = generate_code_verifier();
-	const std::string challenge = code_challenge(code_verifier_);
-	const std::string url = twitch_authorize_url(client_id_, redirect_uri_, state_, challenge);
 
-	if (!start_listener()) {
-		emit failed(QStringLiteral("Could not start the local login listener on port %1")
-				    .arg(QString::number(port_)));
+	if (!bind_listener()) {
+		emit failed(QStringLiteral("Could not start the local login listener on any redirect port"));
 		return;
 	}
+
+	const std::string challenge = code_challenge(code_verifier_);
+	const std::string url = twitch_authorize_url(client_id_, active_redirect_uri_, state_, challenge);
 	if (!QDesktopServices::openUrl(QUrl(QString::fromStdString(url)))) {
 		listener_->close();
 		emit failed(QStringLiteral("Could not open the browser for Twitch login"));
@@ -145,7 +157,7 @@ void TwitchConnectFlow::handle_redirect_query(std::string_view query)
 
 void TwitchConnectFlow::exchange_code(std::string_view code)
 {
-	const std::string body = token_exchange_body(client_id_, code, redirect_uri_, code_verifier_);
+	const std::string body = token_exchange_body(client_id_, code, active_redirect_uri_, code_verifier_);
 	post_form(kTwitchTokenEndpoint, body, [this](std::optional<std::string> response) {
 		if (!response) {
 			emit failed(QStringLiteral("Could not reach Twitch"));

@@ -7,11 +7,11 @@
 #include <QObject>
 #include <QString>
 
-#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -24,7 +24,7 @@ class TwitchConnectFlow final : public QObject {
 	Q_OBJECT
 
 public:
-	TwitchConnectFlow(std::string client_id, std::string redirect_uri, QObject *parent = nullptr);
+	TwitchConnectFlow(std::string client_id, std::vector<std::string> redirect_uris, QObject *parent = nullptr);
 
 	// Pass a stored refresh token to try a silent refresh first; empty means full browser
 	// flow. A failed refresh falls back to the browser flow automatically.
@@ -37,7 +37,7 @@ signals:
 private:
 	using Handler = std::function<void(std::optional<std::string>)>;
 
-	bool start_listener();
+	bool bind_listener();
 	void start_browser_flow();
 	void refresh_with_token(std::string_view refresh_token);
 	void handle_connection(QTcpSocket *socket);
@@ -51,8 +51,8 @@ private:
 	void finish_reply(QNetworkReply *reply, Handler on_done);
 
 	std::string client_id_;
-	std::string redirect_uri_;
-	std::uint16_t port_ = 0;
+	std::vector<std::string> redirect_uris_;
+	std::string active_redirect_uri_;
 
 	std::string state_;
 	std::string code_verifier_;

@@ -315,7 +315,7 @@ void DestinationEditorDialog::connect_twitch()
 	const std::optional<std::string> refresh_token =
 		(stored.secret && !stored.secret->empty()) ? stored.secret : std::nullopt;
 
-	flow_ = new TwitchConnectFlow(std::string(kTwitchClientId), std::string(kTwitchRedirectUri), this);
+	flow_ = new TwitchConnectFlow(std::string(kTwitchClientId), twitch_redirect_uris(), this);
 	connect(flow_, &TwitchConnectFlow::succeeded, this, &DestinationEditorDialog::on_connect_succeeded);
 	connect(flow_, &TwitchConnectFlow::failed, this, &DestinationEditorDialog::on_connect_failed);
 
