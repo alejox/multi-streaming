@@ -75,11 +75,14 @@ colors, flat editor form, untranslated validation messages, unsafe destructive a
 
 ## Next step
 
-Install the build and run the user manual check in OBS (Yami, Yami Light, System):
+Installed on 2026-11-07 (clean reinstall: the previous bundle kept a stale PlugIns/tls dylib that broke the seal; removed, reinstalled, codesign OK, links /usr/lib/libcurl.4.dylib). Final parent checks: 34/34 core tests, macOS build OK, locale KEYS_MATCH.
+
+Run the user manual check in OBS and run the user manual check in OBS (Yami, Yami Light, System):
 1. Vertical dock: scenes/sources toolbar icons (plus, minus, up, down, gear) and subtitle titles; muted small audio note, and its link still removes audio-only sources.
 2. Changes made in OBS's own docks (rename a source, hide/lock/reorder/remove items via another view, add or remove a vertical scene through another tool) show up immediately, with no idle CPU from polling.
 3. Delete/Backspace removes the selected scene or source after the confirmation; never while renaming a scene.
 4. Resolution dialog: presets, aspect label, odd size disables OK with the red line.
 5. Editor: Ctrl/Cmd+Shift+H reveals the key from the keyboard; new sync label fits in Spanish.
 6. Flapping line shows the reconnect count (pull the network a few times while live).
-Then open the PR (user decision).
+7. Earlier tasks: editor sections/presets/key links, dock theme/empty state/confirmations/live timer, Twitch login (libcurl), follow-main start with encoder sharing, Settings > Video FPS change on the vertical canvas, per-collection vertical scenes.
+Then open the PR (user decision). Windows/Linux builds not compiled locally (CI).

@@ -20,7 +20,7 @@ Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake.
 
 2. Open OBS and confirm that its log contains `[obs-multi-stream] loaded version`.
 3. Open **Docks > Multi Stream** and add a destination.
-4. Open **Docks > Vertical Canvas** if a destination uses the vertical source.
+4. Open **Docks > Vertical canvas** if a destination uses the vertical source.
 
 > **First load changes your scene collection.** The plugin adds a canvas named `obs-multi-stream-vertical` to it, and removing the plugin does not remove that canvas. See [Uninstall](#uninstall).
 
