@@ -7,7 +7,7 @@
 
 namespace multistream {
 
-inline constexpr std::string_view kTwitchClientId = "REPLACE_ME";
+inline constexpr std::string_view kTwitchClientId = "53k1chs97qk6taty3vxhr0zzg2n4kh";
 inline constexpr std::string_view kTwitchRedirectUri = "http://localhost:8090/";
 
 } // namespace multistream
