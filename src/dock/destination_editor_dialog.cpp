@@ -327,6 +327,7 @@ void DestinationEditorDialog::connect_twitch()
 void DestinationEditorDialog::on_connect_succeeded(const QString &stream_key, const QString &channel_login,
 						   const QString &refresh_token)
 {
+	blog(LOG_INFO, "[obs-multi-stream] Twitch connect succeeded as %s", channel_login.toUtf8().constData());
 	cleanup_flow();
 	key_->setText(stream_key);
 
@@ -340,6 +341,7 @@ void DestinationEditorDialog::on_connect_succeeded(const QString &stream_key, co
 
 void DestinationEditorDialog::on_connect_failed(const QString &message)
 {
+	blog(LOG_WARNING, "[obs-multi-stream] Twitch connect failed: %s", message.toUtf8().constData());
 	cleanup_flow();
 	show_connect_status(message);
 }
