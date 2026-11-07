@@ -234,7 +234,7 @@ bool DockController::open_editor(const Destination &initial, bool is_new)
 		[this](const Destination &destination, const std::optional<std::string> &new_key) {
 			return save(destination, new_key);
 		},
-		dock_);
+		&secrets_, dock_);
 	return dialog.exec() == QDialog::Accepted;
 }
 

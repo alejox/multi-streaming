@@ -2,6 +2,9 @@
 
 #include "destinations/destination_editing.hpp"
 #include "dock/icons.hpp"
+#include "oauth/twitch_client_id.hpp"
+#include "oauth/twitch_connect_flow.hpp"
+#include "oauth/twitch_token_store.hpp"
 
 #include <obs-module.h>
 
@@ -9,8 +12,10 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -46,11 +51,12 @@ std::string platform_text_key(const char *prefix, Platform platform)
 
 DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, bool is_new,
 						 const std::vector<EncoderChoice> &encoders, SaveHandler save,
-						 QWidget *parent)
+						 SecretStore *secrets, QWidget *parent)
 	: QDialog(parent),
 	  initial_(initial),
 	  is_new_(is_new),
-	  save_(std::move(save))
+	  save_(std::move(save)),
+	  secrets_(secrets)
 {
 	setWindowTitle(obs_module_text(is_new ? "Editor.AddTitle" : "Editor.EditTitle"));
 
@@ -90,6 +96,18 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 		key_->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
 	});
 	form->addRow(QString(), show_key_);
+
+	connect_twitch_ = new QPushButton(obs_module_text("Editor.ConnectTwitch"), this);
+	connect(connect_twitch_, &QPushButton::clicked, this, &DestinationEditorDialog::connect_twitch);
+	connect_status_ = new QLabel(this);
+	connect_status_->setWordWrap(true);
+	connect_status_->setTextFormat(Qt::PlainText);
+	connect_status_->hide();
+
+	auto *connect_row = new QHBoxLayout();
+	connect_row->addWidget(connect_twitch_);
+	connect_row->addWidget(connect_status_, 1);
+	form->addRow(QString(), connect_row);
 
 	video_source_ = new QComboBox(this);
 	video_source_->addItem(obs_module_text("Source.Main"), static_cast<int>(VideoSource::Main));
@@ -158,6 +176,7 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	layout->addWidget(buttons);
 
 	update_custom_fields();
+	update_connect_visibility();
 }
 
 void DestinationEditorDialog::accept()
@@ -254,6 +273,7 @@ void DestinationEditorDialog::service_picked()
 	server_url_->setText(
 		QString::fromStdString(url_after_picking(platform, server_url_->text().trimmed().toStdString())));
 	update_service_hint();
+	update_connect_visibility();
 }
 
 void DestinationEditorDialog::update_service_hint()
@@ -269,6 +289,74 @@ void DestinationEditorDialog::update_custom_fields()
 	const bool custom = static_cast<EncoderMode>(encoder_mode_->currentData().toInt()) == EncoderMode::Custom;
 	encoder_id_->setEnabled(custom);
 	bitrate_->setEnabled(custom);
+}
+
+void DestinationEditorDialog::update_connect_visibility()
+{
+	const auto platform = static_cast<Platform>(service_->currentData().toInt());
+	connect_twitch_->setVisible(platform == Platform::Twitch);
+	if (platform != Platform::Twitch) {
+		connect_status_->hide();
+	}
+}
+
+void DestinationEditorDialog::connect_twitch()
+{
+	if (!secrets_) {
+		show_connect_status(QStringLiteral("Stream key storage is unavailable"));
+		return;
+	}
+	if (flow_) {
+		return;
+	}
+
+	TwitchTokenStore token_store(*secrets_);
+	const SecretLookup stored = token_store.get(initial_.id);
+	const std::optional<std::string> refresh_token =
+		(stored.secret && !stored.secret->empty()) ? stored.secret : std::nullopt;
+
+	flow_ = new TwitchConnectFlow(std::string(kTwitchClientId), std::string(kTwitchRedirectUri), this);
+	connect(flow_, &TwitchConnectFlow::succeeded, this, &DestinationEditorDialog::on_connect_succeeded);
+	connect(flow_, &TwitchConnectFlow::failed, this, &DestinationEditorDialog::on_connect_failed);
+
+	connect_twitch_->setEnabled(false);
+	show_connect_status(obs_module_text("Editor.ConnectTwitchWaiting"));
+	flow_->start(refresh_token);
+}
+
+void DestinationEditorDialog::on_connect_succeeded(const QString &stream_key, const QString &channel_login,
+						   const QString &refresh_token)
+{
+	cleanup_flow();
+	key_->setText(stream_key);
+
+	if (secrets_) {
+		TwitchTokenStore token_store(*secrets_);
+		token_store.put(initial_.id, refresh_token.toStdString());
+	}
+
+	show_connect_status(QString::fromUtf8(obs_module_text("Editor.ConnectTwitchDone")).arg(channel_login));
+}
+
+void DestinationEditorDialog::on_connect_failed(const QString &message)
+{
+	cleanup_flow();
+	show_connect_status(message);
+}
+
+void DestinationEditorDialog::cleanup_flow()
+{
+	if (flow_) {
+		flow_->deleteLater();
+		flow_ = nullptr;
+	}
+	connect_twitch_->setEnabled(true);
+}
+
+void DestinationEditorDialog::show_connect_status(const QString &message)
+{
+	connect_status_->setText(message);
+	connect_status_->setVisible(!message.isEmpty());
 }
 
 } // namespace multistream

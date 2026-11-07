@@ -44,6 +44,7 @@ target_sources(
     src/dock/vertical_controller.cpp
     src/dock/vertical_dock.cpp
     src/dock/vertical_preview.cpp
+    src/oauth/twitch_connect_flow.cpp
     src/plugin_main.cpp
     src/streaming/main_stream_encoders.cpp
     src/streaming/streaming_engine.cpp

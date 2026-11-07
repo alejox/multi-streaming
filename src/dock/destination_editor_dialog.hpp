@@ -3,6 +3,7 @@
 #pragma once
 
 #include "destinations/destination.hpp"
+#include "destinations/secret_store.hpp"
 #include "destinations/validation.hpp"
 
 #include <QDialog>
@@ -19,9 +20,12 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QSpinBox;
 
 namespace multistream {
+
+class TwitchConnectFlow;
 
 struct EncoderChoice {
 	QString id;
@@ -36,7 +40,7 @@ public:
 	using SaveHandler = std::function<std::optional<QString>(const Destination &, const std::optional<std::string> &)>;
 
 	DestinationEditorDialog(const Destination &initial, bool is_new, const std::vector<EncoderChoice> &encoders,
-				SaveHandler save, QWidget *parent);
+				SaveHandler save, SecretStore *secrets, QWidget *parent);
 
 	void accept() override;
 
@@ -48,10 +52,17 @@ private:
 	void update_custom_fields();
 	void service_picked();
 	void update_service_hint();
+	void update_connect_visibility();
+	void connect_twitch();
+	void on_connect_succeeded(const QString &stream_key, const QString &channel_login, const QString &refresh_token);
+	void on_connect_failed(const QString &message);
+	void cleanup_flow();
+	void show_connect_status(const QString &message);
 
 	Destination initial_;
 	bool is_new_;
 	SaveHandler save_;
+	SecretStore *secrets_ = nullptr;
 
 	QLineEdit *name_ = nullptr;
 	QComboBox *service_ = nullptr;
@@ -60,6 +71,9 @@ private:
 	QLineEdit *server_url_ = nullptr;
 	QLineEdit *key_ = nullptr;
 	QCheckBox *show_key_ = nullptr;
+	QPushButton *connect_twitch_ = nullptr;
+	QLabel *connect_status_ = nullptr;
+	TwitchConnectFlow *flow_ = nullptr;
 	QComboBox *video_source_ = nullptr;
 	QComboBox *encoder_mode_ = nullptr;
 	QComboBox *encoder_id_ = nullptr;
