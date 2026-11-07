@@ -12,6 +12,7 @@
 #include <obs.hpp>
 
 #include <QTimer>
+#include <QPointer>
 #include <QWidget>
 
 #include <cstdint>
@@ -68,9 +69,11 @@ private:
 	QSize pixel_size() const;
 	void create_display();
 	void watch_window();
-	// Recreates the display once control returns to the event loop, after a screen or
-	// pixel-ratio change has settled. Coalesces repeated requests.
+	// Recreates the display once the window has stopped moving after a screen or
+	// pixel-ratio change. Repeated requests and window moves push it back.
 	void schedule_recreate(const char *reason);
+	void recreate_display();
+	void watch_top_level();
 	PreviewMapping mapping() const;
 	Vec2 canvas_point(const QPointF &position) const;
 	PreviewInteraction::Tolerances tolerances() const;
@@ -87,7 +90,10 @@ private:
 	// the delay by then and any OpenGL swapchain update it queued has long finished.
 	std::vector<OBSDisplay> retired_displays_;
 	QTimer purge_timer_;
-	bool recreate_pending_ = false;
+	QTimer recreate_timer_;
+	const char *recreate_reason_ = "";
+	// The top-level window holding this preview; its moves postpone a pending recreate.
+	QPointer<QWindow> watched_top_level_;
 	QWindow *watched_window_ = nullptr;
 	// Read on the graphics thread, so only changed while no draw callback is registered.
 	std::shared_ptr<VerticalPreviewTarget> target_;

@@ -28,6 +28,8 @@ constexpr double kDragThreshold = 2.0;
 constexpr int kOverlayIntervalMilliseconds = 33;
 // Long past any swapchain update a retired display queued on the main thread.
 constexpr int kRetiredDisplayPurgeMilliseconds = 5000;
+// How long the window must stay still after a screen change before the display is remade.
+constexpr int kRecreateSettleMilliseconds = 300;
 
 std::optional<NudgeDirection> nudge_direction(int key)
 {
@@ -69,6 +71,10 @@ VerticalPreview::VerticalPreview(QWidget *parent) : QWidget(parent)
 	setFocusPolicy(Qt::ClickFocus);
 	overlay_timer_.setInterval(kOverlayIntervalMilliseconds);
 	connect(&overlay_timer_, &QTimer::timeout, this, &VerticalPreview::refresh_overlay);
+
+	recreate_timer_.setSingleShot(true);
+	recreate_timer_.setInterval(kRecreateSettleMilliseconds);
+	connect(&recreate_timer_, &QTimer::timeout, this, &VerticalPreview::recreate_display);
 
 	purge_timer_.setSingleShot(true);
 	purge_timer_.setInterval(kRetiredDisplayPurgeMilliseconds);
@@ -137,24 +143,48 @@ void VerticalPreview::release()
 
 void VerticalPreview::schedule_recreate(const char *reason)
 {
-	if (recreate_pending_) {
+	recreate_reason_ = reason;
+	recreate_timer_.start();
+}
+
+void VerticalPreview::recreate_display()
+{
+	if (!isVisible()) {
 		return;
 	}
-	recreate_pending_ = true;
-	QTimer::singleShot(0, this, [this, reason] {
-		recreate_pending_ = false;
-		if (!isVisible()) {
-			return;
-		}
-		// On macOS the OpenGL swapchain re-attaches to its view only when its pixel size
-		// changes, so a move to another screen at the same size leaves the view blank.
-		// A fresh display attaches to the view as it is now.
-		const QSize pixels = pixel_size();
-		blog(LOG_INFO, "[obs-multi-stream] vertical preview %s, recreating its display at %dx%d", reason,
-		     pixels.width(), pixels.height());
-		release();
-		create_display();
-	});
+	// On macOS the OpenGL swapchain re-attaches its surface to the view only when its pixel
+	// size changes, so after a move to another screen at the same size the view stays blank
+	// or the surface stays where the view was mid-move. A fresh display, made once the
+	// window has settled, attaches to the view where it is now.
+	const QSize pixels = pixel_size();
+	const QPoint in_window = mapTo(window(), QPoint(0, 0));
+	const QScreen *current = screen();
+	blog(LOG_INFO,
+	     "[obs-multi-stream] vertical preview %s, recreating its display at %dx%d px, at %d,%d in its window, "
+	     "on screen '%s' (ratio %.2f)",
+	     recreate_reason_, pixels.width(), pixels.height(), in_window.x(), in_window.y(),
+	     current != nullptr ? current->name().toUtf8().constData() : "?", devicePixelRatioF());
+	release();
+	create_display();
+}
+
+void VerticalPreview::watch_top_level()
+{
+	QWidget *top = window();
+	QWindow *handle = top != nullptr ? top->windowHandle() : nullptr;
+	if (handle == watched_top_level_) {
+		return;
+	}
+	if (watched_top_level_ != nullptr) {
+		watched_top_level_->removeEventFilter(this);
+		disconnect(watched_top_level_, nullptr, this, nullptr);
+	}
+	watched_top_level_ = handle;
+	if (handle != nullptr) {
+		handle->installEventFilter(this);
+		connect(handle, &QWindow::screenChanged, this,
+			[this](QScreen *) { schedule_recreate("moved to another screen"); });
+	}
 }
 
 void VerticalPreview::draw(void *data, uint32_t width, uint32_t height)
@@ -169,6 +199,7 @@ QSize VerticalPreview::pixel_size() const
 
 void VerticalPreview::watch_window()
 {
+	watch_top_level();
 	QWindow *window = windowHandle();
 	if (window == watched_window_) {
 		return;
@@ -323,6 +354,10 @@ bool VerticalPreview::eventFilter(QObject *watched, QEvent *event)
 	    static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType() ==
 		    QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
 		release();
+	}
+	// While a recreate waits, every move of the window pushes it back until the move ends.
+	if (watched == watched_top_level_ && event->type() == QEvent::Move && recreate_timer_.isActive()) {
+		recreate_timer_.start();
 	}
 	// A display lost while the window was hidden or off screen comes back once it is
 	// exposed again, without waiting for a resize.
