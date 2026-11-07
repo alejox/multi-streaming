@@ -4,8 +4,8 @@
 
 namespace multistream {
 
-RemovalResult remove_destination(DestinationsConfig &config, ConfigRepository &repository, SecretStore &secrets,
-				 const std::string &destination_id)
+RemovalResult remove_destination_entry(DestinationsConfig &config, ConfigRepository &repository,
+				       const std::string &destination_id)
 {
 	RemovalResult result;
 
@@ -26,7 +26,16 @@ RemovalResult remove_destination(DestinationsConfig &config, ConfigRepository &r
 
 	config = std::move(remaining);
 	result.removed = true;
-	result.secret_error = secrets.remove(destination_id);
+	return result;
+}
+
+RemovalResult remove_destination(DestinationsConfig &config, ConfigRepository &repository, SecretStore &secrets,
+				 const std::string &destination_id)
+{
+	RemovalResult result = remove_destination_entry(config, repository, destination_id);
+	if (result.removed) {
+		result.secret_error = secrets.remove(destination_id);
+	}
 	return result;
 }
 

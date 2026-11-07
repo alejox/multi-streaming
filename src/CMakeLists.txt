@@ -55,8 +55,10 @@ add_library(
   persistence/file_config_repository.cpp
   persistence/vertical_settings_file.cpp
   secrets/platform_secret_store.cpp
+  secrets/secret_worker.cpp
 )
-target_link_libraries(multistream_adapters PUBLIC multistream_core)
+find_package(Threads REQUIRED)
+target_link_libraries(multistream_adapters PUBLIC multistream_core Threads::Threads)
 set_target_properties(multistream_adapters PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(APPLE)
   target_sources(multistream_adapters PRIVATE secrets/keychain_secret_store.cpp)

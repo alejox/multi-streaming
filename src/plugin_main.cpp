@@ -215,7 +215,7 @@ void activate_features()
 			dock->show_problem(QString::fromStdString(*load.problem));
 		}
 		composition->controller = std::make_unique<multistream::DockController>(
-			std::move(load.config), composition->repository, *composition->secrets, composition->engine,
+			std::move(load.config), composition->repository, composition->secrets, composition->engine,
 			dock);
 	}
 

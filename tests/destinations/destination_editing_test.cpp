@@ -125,3 +125,42 @@ TEST_CASE(a_key_that_cannot_be_stored_is_reported_after_saving)
 	CHECK(result.secret_error.has_value());
 	CHECK_EQ(config.destinations.size(), std::size_t{1});
 }
+
+TEST_CASE(saving_only_the_entry_adds_or_replaces_it_without_touching_secrets)
+{
+	DestinationsConfig config;
+	config.destinations = {named("a", "A")};
+	FakeRepository repository;
+
+	CHECK(!save_destination_entry(config, repository, named("a", "Renamed")).has_value());
+	CHECK(!save_destination_entry(config, repository, named("b", "B")).has_value());
+
+	REQUIRE(config.destinations.size() == 2);
+	CHECK_EQ(config.destinations[0].name, "Renamed");
+	CHECK_EQ(config.destinations[1].id, "b");
+	CHECK(repository.saved == config);
+}
+
+TEST_CASE(saving_only_the_entry_reports_a_failed_save_and_changes_nothing)
+{
+	DestinationsConfig config;
+	config.destinations = {named("a", "A")};
+	FakeRepository repository;
+	repository.fail_saves = true;
+
+	CHECK(save_destination_entry(config, repository, named("a", "Renamed")).has_value());
+	CHECK_EQ(config.destinations[0].name, "A");
+}
+
+TEST_CASE(a_rotated_refresh_token_survives_cancel_only_when_it_replaces_a_stored_one)
+{
+	// Existing destination whose stored token was used and rotated by Twitch.
+	CHECK(keep_refresh_token_on_cancel(false, true, true));
+	// A brand-new destination keeps nothing: there is no entry the token could belong to.
+	CHECK(!keep_refresh_token_on_cancel(true, true, true));
+	CHECK(!keep_refresh_token_on_cancel(true, false, true));
+	// Nothing was stored before, so nothing was invalidated by the connect.
+	CHECK(!keep_refresh_token_on_cancel(false, false, true));
+	// No new token to keep.
+	CHECK(!keep_refresh_token_on_cancel(false, true, false));
+}

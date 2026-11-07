@@ -101,3 +101,33 @@ TEST_CASE(unknown_destination_changes_nothing)
 	CHECK(repository.saved == DestinationsConfig{});
 	CHECK_EQ(secrets.get("first").secret.value_or(""), "live_first");
 }
+
+TEST_CASE(removing_only_the_entry_saves_the_config_and_leaves_the_secret)
+{
+	DestinationsConfig config = two_destinations();
+	FakeRepository repository;
+	InMemorySecretStore secrets;
+	secrets.put("first", "live_first");
+
+	const RemovalResult result = remove_destination_entry(config, repository, "first");
+
+	CHECK(result.removed);
+	CHECK(!result.config_error.has_value());
+	REQUIRE(config.destinations.size() == 1);
+	CHECK_EQ(config.destinations[0].id, "second");
+	CHECK(repository.saved == config);
+	CHECK_EQ(secrets.get("first").secret.value_or(""), "live_first");
+}
+
+TEST_CASE(removing_only_the_entry_reports_a_failed_save_and_changes_nothing)
+{
+	DestinationsConfig config = two_destinations();
+	FakeRepository repository;
+	repository.fail_saves = true;
+
+	const RemovalResult result = remove_destination_entry(config, repository, "first");
+
+	CHECK(!result.removed);
+	CHECK(result.config_error.has_value());
+	CHECK(config == two_destinations());
+}

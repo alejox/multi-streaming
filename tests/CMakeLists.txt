@@ -61,6 +61,7 @@ add_core_test(file_config_repository_test persistence/file_config_repository_tes
 add_core_test(vertical_settings_file_test persistence/vertical_settings_file_test.cpp)
 add_core_test(in_memory_secret_store_test secrets/in_memory_secret_store_test.cpp)
 add_core_test(unavailable_secret_store_test secrets/unavailable_secret_store_test.cpp)
+add_core_test(secret_worker_test secrets/secret_worker_test.cpp)
 add_core_test(e2e_file_secret_store_test secrets/e2e_file_secret_store_test.cpp ../src/secrets/e2e_file_secret_store.cpp)
 target_compile_definitions(e2e_file_secret_store_test PRIVATE MULTI_STREAM_E2E_SECRETS)
 

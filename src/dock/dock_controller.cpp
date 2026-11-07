@@ -6,9 +6,11 @@
 #include "destinations/session_selection.hpp"
 #include "dock/destination_editor_dialog.hpp"
 #include "dock/icons.hpp"
+#include "oauth/twitch_token_store.hpp"
 #include "streaming/main_stream_encoders.hpp"
 
 #include <obs-module.h>
+#include <plugin-support.h>
 
 #include <QLocale>
 #include <QMessageBox>
@@ -90,13 +92,15 @@ DestinationRowStatus row_status(const DestinationStatus &status)
 
 } // namespace
 
-DockController::DockController(DestinationsConfig config, ConfigRepository &repository, SecretStore &secrets,
-			       StreamingEngine &engine, DestinationsDock *dock)
+DockController::DockController(DestinationsConfig config, ConfigRepository &repository,
+			       std::shared_ptr<SecretStore> secrets, StreamingEngine &engine, DestinationsDock *dock)
 	: config_(std::move(config)),
 	  repository_(repository),
-	  secrets_(secrets),
 	  engine_(engine),
-	  dock_(dock)
+	  dock_(dock),
+	  secret_worker_(std::move(secrets), [this](std::function<void()> work) {
+		  QMetaObject::invokeMethod(this, std::move(work), Qt::QueuedConnection);
+	  })
 {
 	engine_.set_destinations(config_.destinations);
 	engine_.set_status_listener([this](const DestinationStatus &status) {
@@ -130,6 +134,8 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 
 DockController::~DockController()
 {
+	// Results already posted to this object are dropped with it.
+	secret_worker_.close();
 	engine_.set_status_listener(nullptr);
 }
 
@@ -161,17 +167,31 @@ void DockController::delete_destination(const QString &id)
 		return;
 	}
 
-	const RemovalResult result = remove_destination(config_, repository_, secrets_, id.toStdString());
+	// The entry goes at once, so its row and its Delete action are gone before the secret
+	// store is reached and a second delete cannot be submitted.
+	const std::string destination_id = id.toStdString();
+	const RemovalResult result = remove_destination_entry(config_, repository_, destination_id);
 	if (result.config_error && dock_) {
 		dock_->show_problem(QString::fromStdString(*result.config_error));
 	}
-	if (result.secret_error && dock_) {
-		dock_->show_problem(text("Dock.KeyNotDeleted").arg(QString::fromStdString(result.secret_error->message)));
+	if (!result.removed) {
+		return;
 	}
-	if (result.removed) {
-		engine_.set_destinations(config_.destinations);
-		refresh_rows();
-	}
+	engine_.set_destinations(config_.destinations);
+	refresh_rows();
+
+	secret_worker_.run<std::optional<SecretError>>(
+		[destination_id](SecretStore &secrets) {
+			std::optional<SecretError> error = secrets.remove(destination_id);
+			const std::optional<SecretError> token_error = TwitchTokenStore(secrets).remove(destination_id);
+			return error ? error : token_error;
+		},
+		[this](std::optional<SecretError> error) {
+			if (error && dock_) {
+				dock_->show_problem(
+					text("Dock.KeyNotDeleted").arg(QString::fromStdString(error->message)));
+			}
+		});
 }
 
 void DockController::move_destination(const QString &id, bool up)
@@ -236,27 +256,53 @@ bool DockController::open_editor(const Destination &initial, bool is_new)
 
 	DestinationEditorDialog dialog(
 		initial, is_new, encoders,
-		[this](const Destination &destination, const std::optional<std::string> &new_key) {
-			return save(destination, new_key);
+		[this](const Destination &destination, const std::optional<std::string> &new_key,
+		       const std::optional<std::string> &refresh_token, DestinationEditorDialog::SaveDone done) {
+			save(destination, new_key, refresh_token, std::move(done));
 		},
-		&secrets_, dock_);
+		&secret_worker_, dock_);
 	return dialog.exec() == QDialog::Accepted;
 }
 
-std::optional<QString> DockController::save(const Destination &destination, const std::optional<std::string> &new_key)
+void DockController::save(const Destination &destination, const std::optional<std::string> &new_key,
+			  const std::optional<std::string> &refresh_token, DestinationEditorDialog::SaveDone done)
 {
-	const SaveResult result = save_destination(config_, repository_, secrets_, destination, new_key);
-	if (result.config_error) {
-		return QString::fromStdString(*result.config_error);
+	if (const auto error = save_destination_entry(config_, repository_, destination)) {
+		done(QString::fromStdString(*error));
+		return;
 	}
 
 	engine_.set_destinations(config_.destinations);
 	refresh_rows();
 
-	if (result.secret_error) {
-		return text("Editor.KeyNotStored").arg(QString::fromStdString(result.secret_error->message));
+	if (!new_key && !refresh_token) {
+		done(std::nullopt);
+		return;
 	}
-	return std::nullopt;
+
+	// A key that cannot be stored is reported after saving: starting that destination
+	// then says what is missing. A refresh token that cannot be stored only costs a
+	// browser login on the next connect.
+	const std::string destination_id = destination.id;
+	secret_worker_.run<std::optional<SecretError>>(
+		[destination_id, new_key, refresh_token](SecretStore &secrets) {
+			std::optional<SecretError> key_error;
+			if (new_key) {
+				key_error = secrets.put(destination_id, *new_key);
+			}
+			if (refresh_token && TwitchTokenStore(secrets).put(destination_id, *refresh_token)) {
+				obs_log(LOG_WARNING,
+					"could not store the Twitch refresh token; the next connect opens the browser");
+			}
+			return key_error;
+		},
+		[done = std::move(done)](std::optional<SecretError> error) {
+			if (error) {
+				done(text("Editor.KeyNotStored").arg(QString::fromStdString(error->message)));
+			} else {
+				done(std::nullopt);
+			}
+		});
 }
 
 const Destination *DockController::find(const QString &id) const

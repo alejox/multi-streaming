@@ -5,6 +5,7 @@
 #include "oauth/twitch_client_id.hpp"
 #include "oauth/twitch_connect_flow.hpp"
 #include "oauth/twitch_token_store.hpp"
+#include "secrets/secret_worker.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -16,6 +17,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -52,7 +54,7 @@ std::string platform_text_key(const char *prefix, Platform platform)
 
 DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, bool is_new,
 						 const std::vector<EncoderChoice> &encoders, SaveHandler save,
-						 SecretStore *secrets, QWidget *parent)
+						 SecretWorker *secrets, QWidget *parent)
 	: QDialog(parent),
 	  initial_(initial),
 	  is_new_(is_new),
@@ -183,14 +185,14 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	save_error_->setTextFormat(Qt::PlainText);
 	save_error_->hide();
 
-	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
-	connect(buttons, &QDialogButtonBox::accepted, this, &DestinationEditorDialog::accept);
-	connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+	buttons_ = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+	connect(buttons_, &QDialogButtonBox::accepted, this, &DestinationEditorDialog::accept);
+	connect(buttons_, &QDialogButtonBox::rejected, this, &DestinationEditorDialog::reject);
 
 	auto *layout = new QVBoxLayout(this);
 	layout->addLayout(form);
 	layout->addWidget(save_error_);
-	layout->addWidget(buttons);
+	layout->addWidget(buttons_);
 
 	update_custom_fields();
 	update_connect_visibility();
@@ -198,6 +200,9 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 
 void DestinationEditorDialog::accept()
 {
+	if (saving_) {
+		return;
+	}
 	clear_errors();
 
 	bool valid = true;
@@ -222,18 +227,52 @@ void DestinationEditorDialog::accept()
 	}
 
 	const std::optional<std::string> new_key = entered_key.empty() ? std::nullopt : std::make_optional(entered_key);
-	if (const auto failure = save_(destination, new_key)) {
+	set_saving(true);
+	save_(destination, new_key, pending_refresh_token_,
+	      [dialog = QPointer<DestinationEditorDialog>(this)](std::optional<QString> failure) {
+		      if (dialog) {
+			      dialog->finish_save(failure);
+		      }
+	      });
+}
+
+void DestinationEditorDialog::finish_save(const std::optional<QString> &failure)
+{
+	set_saving(false);
+	if (failure) {
 		show_error(save_error_, *failure);
 		return;
 	}
-	if (pending_refresh_token_ && secrets_) {
-		TwitchTokenStore token_store(*secrets_);
-		if (token_store.put(initial_.id, *pending_refresh_token_)) {
-			obs_log(LOG_WARNING, "could not store the Twitch refresh token; the next connect opens the browser");
-		}
+	pending_refresh_token_.reset();
+	QDialog::accept();
+}
+
+void DestinationEditorDialog::set_saving(bool saving)
+{
+	saving_ = saving;
+	buttons_->setEnabled(!saving);
+	connect_twitch_->setEnabled(!saving && !flow_ && !reading_token_);
+}
+
+void DestinationEditorDialog::reject()
+{
+	if (saving_) {
+		return;
+	}
+	if (secrets_ && keep_refresh_token_on_cancel(is_new_, had_stored_token_, pending_refresh_token_.has_value())) {
+		secrets_->run<std::optional<SecretError>>(
+			[id = initial_.id, token = *pending_refresh_token_](SecretStore &secrets) {
+				std::optional<SecretError> error = TwitchTokenStore(secrets).put(id, token);
+				if (error) {
+					obs_log(LOG_WARNING,
+						"could not store the rotated Twitch refresh token; the next connect opens the browser");
+				}
+				return error;
+			},
+			[](std::optional<SecretError>) {});
 		pending_refresh_token_.reset();
 	}
-	QDialog::accept();
+	QDialog::reject();
 }
 
 QLabel *DestinationEditorDialog::add_field(QFormLayout *form, const char *label_key, QWidget *field)
@@ -330,21 +369,38 @@ void DestinationEditorDialog::connect_twitch()
 		show_connect_status(obs_module_text("Editor.SecretsUnavailable"));
 		return;
 	}
-	if (flow_) {
+	if (flow_ || reading_token_ || saving_) {
 		return;
 	}
 
 	// A token from an earlier connect in this dialog is newer than the stored one: Twitch
-	// rotates refresh tokens on use.
-	std::optional<std::string> refresh_token = pending_refresh_token_;
-	if (!refresh_token) {
-		TwitchTokenStore token_store(*secrets_);
-		const SecretLookup stored = token_store.get(initial_.id);
-		if (stored.secret && !stored.secret->empty()) {
-			refresh_token = stored.secret;
-		}
+	// rotates refresh tokens on use. A new destination has no stored token to read.
+	if (pending_refresh_token_ || is_new_) {
+		start_connect_flow(pending_refresh_token_);
+		return;
 	}
 
+	reading_token_ = true;
+	connect_twitch_->setEnabled(false);
+	show_connect_status(obs_module_text("Editor.ConnectTwitchWaiting"));
+	secrets_->run<SecretLookup>(
+		[id = initial_.id](SecretStore &secrets) { return TwitchTokenStore(secrets).get(id); },
+		[dialog = QPointer<DestinationEditorDialog>(this)](SecretLookup stored) {
+			if (!dialog) {
+				return;
+			}
+			dialog->reading_token_ = false;
+			std::optional<std::string> refresh_token;
+			if (stored.secret && !stored.secret->empty()) {
+				dialog->had_stored_token_ = true;
+				refresh_token = std::move(stored.secret);
+			}
+			dialog->start_connect_flow(refresh_token);
+		});
+}
+
+void DestinationEditorDialog::start_connect_flow(const std::optional<std::string> &refresh_token)
+{
 	flow_ = new TwitchConnectFlow(std::string(kTwitchClientId), twitch_redirect_uris(), this);
 	connect(flow_, &TwitchConnectFlow::succeeded, this, &DestinationEditorDialog::on_connect_succeeded);
 	connect(flow_, &TwitchConnectFlow::failed, this, &DestinationEditorDialog::on_connect_failed);
@@ -380,7 +436,7 @@ void DestinationEditorDialog::cleanup_flow()
 		flow_->deleteLater();
 		flow_ = nullptr;
 	}
-	connect_twitch_->setEnabled(true);
+	connect_twitch_->setEnabled(!saving_);
 }
 
 void DestinationEditorDialog::show_connect_status(const QString &message)
