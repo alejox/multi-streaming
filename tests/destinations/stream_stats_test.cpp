@@ -2,7 +2,12 @@
 
 #include "test_harness.hpp"
 
+#include <string>
+
 using multistream::compute_stream_stats;
+using multistream::drop_level;
+using multistream::DropLevel;
+using multistream::format_elapsed;
 using multistream::OutputCounters;
 
 namespace {
@@ -79,4 +84,34 @@ TEST_CASE(drop_percentages_never_exceed_one_hundred)
 	const auto stats = compute_stream_stats(previous, current);
 	CHECK_NEAR(stats.interval_drop_percent, 100.0, 0.001);
 	CHECK_NEAR(stats.total_drop_percent, 100.0, 0.001);
+}
+
+TEST_CASE(drop_level_is_normal_up_to_one_percent)
+{
+	CHECK(drop_level(0.0) == DropLevel::Normal);
+	CHECK(drop_level(1.0) == DropLevel::Normal);
+}
+
+TEST_CASE(drop_level_warns_above_one_percent)
+{
+	CHECK(drop_level(1.01) == DropLevel::Warning);
+	CHECK(drop_level(5.0) == DropLevel::Warning);
+}
+
+TEST_CASE(drop_level_is_severe_above_five_percent)
+{
+	CHECK(drop_level(5.01) == DropLevel::Severe);
+	CHECK(drop_level(100.0) == DropLevel::Severe);
+}
+
+TEST_CASE(elapsed_time_shows_hours_minutes_and_seconds)
+{
+	CHECK_EQ(format_elapsed(0), std::string("00:00:00"));
+	CHECK_EQ(format_elapsed(59), std::string("00:00:59"));
+	CHECK_EQ(format_elapsed(3725), std::string("01:02:05"));
+}
+
+TEST_CASE(elapsed_time_keeps_counting_hours_past_a_day)
+{
+	CHECK_EQ(format_elapsed(100 * 3600 + 1), std::string("100:00:01"));
 }

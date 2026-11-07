@@ -51,6 +51,8 @@ struct DestinationStatus {
 	std::uint64_t dropped_frames = 0;
 	// The retry in progress, from 1. 0 while connected.
 	int reconnect_attempt = 0;
+	// Seconds until libobs tries that retry; 0 while it is being tried or none is scheduled.
+	int retry_in_seconds = 0;
 	bool flapping = false;
 };
 

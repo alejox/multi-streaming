@@ -53,6 +53,19 @@ const char *tone_class(RowTone tone)
 	return "text-muted";
 }
 
+const char *drop_class(DropLevel level)
+{
+	switch (level) {
+	case DropLevel::Warning:
+		return "text-small text-warning";
+	case DropLevel::Severe:
+		return "text-small text-danger";
+	case DropLevel::Normal:
+		break;
+	}
+	return "text-small text-muted";
+}
+
 // Only for themes whose classes leave the state label in the plain text color.
 QColor fallback_tone_color(RowTone tone, const QPalette &palette)
 {
@@ -200,11 +213,13 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	layout->addWidget(scroll_, 1);
 
 	auto *add = new QPushButton(obs_module_text("Dock.Add"), this);
-	auto *start_all = new QPushButton(obs_module_text("Dock.StartAll"), this);
-	auto *stop_all = new QPushButton(obs_module_text("Dock.StopAll"), this);
+	start_all_ = new QPushButton(obs_module_text("Dock.StartAll"), this);
+	stop_all_ = new QPushButton(obs_module_text("Dock.StopAll"), this);
+	start_all_->setEnabled(false);
+	stop_all_->setEnabled(false);
 	connect(add, &QPushButton::clicked, this, &DestinationsDock::add_requested);
-	connect(start_all, &QPushButton::clicked, this, &DestinationsDock::start_all_requested);
-	connect(stop_all, &QPushButton::clicked, this, &DestinationsDock::stop_all_requested);
+	connect(start_all_, &QPushButton::clicked, this, &DestinationsDock::start_all_requested);
+	connect(stop_all_, &QPushButton::clicked, this, &DestinationsDock::stop_all_requested);
 
 	// Dock preferences live in a menu, so the bar holds only actions.
 	settings_menu_ = new QMenu(this);
@@ -228,8 +243,8 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	auto *buttons = new QHBoxLayout();
 	buttons->addWidget(add);
 	buttons->addStretch();
-	buttons->addWidget(start_all);
-	buttons->addWidget(stop_all);
+	buttons->addWidget(start_all_);
+	buttons->addWidget(stop_all_);
 	buttons->addWidget(settings_);
 	layout->addLayout(buttons);
 
@@ -253,7 +268,8 @@ void DestinationsDock::set_rows(const std::vector<DestinationRowView> &rows)
 
 	int position = 0;
 	for (const DestinationRowView &view : rows) {
-		rows_layout_->insertWidget(position++, create_row(view));
+		rows_layout_->insertWidget(position, create_row(view, position));
+		++position;
 	}
 	empty_->setVisible(rows.empty());
 	scroll_->setVisible(!rows.empty());
@@ -267,21 +283,31 @@ void DestinationsDock::update_status(const QString &id, const DestinationRowStat
 	}
 }
 
+void DestinationsDock::set_bulk_actions(bool can_start_all, bool can_stop_all)
+{
+	start_all_->setEnabled(can_start_all);
+	stop_all_->setEnabled(can_stop_all);
+}
+
 void DestinationsDock::show_problem(const QString &problem)
 {
 	problem_->setText(problem);
 	problem_frame_->show();
 }
 
-QWidget *DestinationsDock::create_row(const DestinationRowView &view)
+QWidget *DestinationsDock::create_row(const DestinationRowView &view, int position)
 {
 	auto *row = new QFrame();
 	row->setFrameShape(QFrame::StyledPanel);
+	row->setAccessibleName(view.name);
 
 	RowWidgets widgets;
+	widgets.row = row;
+	widgets.name = view.name;
 	widgets.icon_file = view.icon_file;
 	widgets.brand_color = view.brand_color;
 	widgets.icon = new QLabel(row);
+	widgets.icon->setAccessibleName(view.platform_name);
 
 	widgets.handle = new QLabel(row);
 	widgets.handle->setCursor(Qt::OpenHandCursor);
@@ -301,10 +327,12 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.state = new QLabel(row);
 	widgets.state->setTextFormat(Qt::PlainText);
 	widgets.state->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	widgets.stats = new QLabel(row);
-	widgets.stats->setTextFormat(Qt::PlainText);
-	widgets.stats->setWordWrap(true);
-	widgets.stats->hide();
+	widgets.bitrate = new QLabel(row);
+	widgets.bitrate->setProperty("class", "text-small text-muted");
+	widgets.bitrate->setTextFormat(Qt::PlainText);
+	widgets.dropped = new QLabel(row);
+	widgets.dropped->setProperty("class", "text-small text-muted");
+	widgets.dropped->setTextFormat(Qt::PlainText);
 	widgets.detail = wrapping_label(row);
 	widgets.warning = wrapping_label(row);
 	widgets.warning->setProperty("class", "text-warning");
@@ -317,6 +345,8 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.move_up = menu->addAction(themed_icon("icons/ui/up.svg", palette()), obs_module_text("Dock.MoveUp"));
 	widgets.move_down =
 		menu->addAction(themed_icon("icons/ui/down.svg", palette()), obs_module_text("Dock.MoveDown"));
+	widgets.move_up->setEnabled(position > 0);
+	widgets.move_down->setEnabled(position < row_count_ - 1);
 	menu->addSeparator();
 	widgets.edit = menu->addAction(obs_module_text("Dock.Edit"));
 	menu->addSeparator();
@@ -363,6 +393,12 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	status_line->addWidget(widgets.toggle);
 	status_line->addWidget(widgets.more);
 
+	auto *stats_line = new QHBoxLayout();
+	stats_line->setSpacing(4);
+	stats_line->addWidget(widgets.bitrate);
+	stats_line->addWidget(widgets.dropped);
+	stats_line->addStretch();
+
 	auto *outer = new QHBoxLayout(row);
 	outer->setContentsMargins(2, 4, 6, 4);
 	outer->setSpacing(4);
@@ -373,7 +409,7 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	outer->addLayout(layout, 1);
 	layout->addLayout(title_line);
 	layout->addLayout(status_line);
-	layout->addWidget(widgets.stats);
+	layout->addLayout(stats_line);
 	layout->addWidget(widgets.detail);
 	layout->addWidget(widgets.warning);
 
@@ -386,13 +422,19 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowStatus &status)
 {
 	widgets.state->setText(status.state);
-	widgets.state->setToolTip(status.detail);
+	widgets.row->setAccessibleDescription(status.state);
 	widgets.detail->setText(status.detail);
 	widgets.detail->setVisible(!status.detail.isEmpty());
 	widgets.warning->setText(status.warning);
+	widgets.warning->setToolTip(status.warning_hint);
 	widgets.warning->setVisible(!status.warning.isEmpty());
-	widgets.stats->setText(status.stats);
-	widgets.stats->setVisible(!status.stats.isEmpty());
+	const bool on_air = !status.bitrate.isEmpty();
+	// The separator stays with the bitrate so the drop figure can carry its own color.
+	widgets.bitrate->setText(status.bitrate + QStringLiteral(" \u00B7"));
+	widgets.bitrate->setVisible(on_air);
+	widgets.dropped->setText(status.dropped);
+	widgets.dropped->setVisible(on_air);
+	set_theme_class(widgets.dropped, drop_class(status.drop_level));
 
 	const bool changed = widgets.stops != status.can_stop || widgets.tone != status.tone;
 	widgets.stops = status.can_stop;
@@ -400,7 +442,9 @@ void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowSta
 	set_theme_class(widgets.state, tone_class(status.tone));
 	const char *const label = status.can_stop ? "Dock.Stop" : "Dock.Start";
 	widgets.toggle->setText(obs_module_text(label));
-	widgets.toggle->setAccessibleName(obs_module_text(label));
+	widgets.toggle->setAccessibleName(
+		QString::fromUtf8(obs_module_text(status.can_stop ? "Dock.StopNamed" : "Dock.StartNamed"))
+			.arg(widgets.name));
 	widgets.toggle->setEnabled(status.can_start || status.can_stop);
 	widgets.edit->setEnabled(status.can_edit);
 	widgets.remove->setEnabled(status.can_edit);

@@ -1,6 +1,7 @@
 #include "destinations/stream_stats.hpp"
 
 #include <algorithm>
+#include <cstdio>
 
 namespace multistream {
 namespace {
@@ -32,6 +33,25 @@ StreamStats compute_stream_stats(const OutputCounters &previous, const OutputCou
 
 	stats.total_drop_percent = drop_percent(current.dropped_frames, current.total_frames);
 	return stats;
+}
+
+DropLevel drop_level(double drop_percent)
+{
+	if (drop_percent > 5.0) {
+		return DropLevel::Severe;
+	}
+	if (drop_percent > 1.0) {
+		return DropLevel::Warning;
+	}
+	return DropLevel::Normal;
+}
+
+std::string format_elapsed(std::uint64_t seconds)
+{
+	char text[32];
+	std::snprintf(text, sizeof(text), "%02llu:%02u:%02u", static_cast<unsigned long long>(seconds / 3600),
+		      static_cast<unsigned>(seconds / 60 % 60), static_cast<unsigned>(seconds % 60));
+	return text;
 }
 
 } // namespace multistream

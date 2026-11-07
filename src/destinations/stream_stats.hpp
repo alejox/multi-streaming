@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace multistream {
 
@@ -21,5 +22,13 @@ struct StreamStats {
 // Values that cannot be derived from the interval are reported as zero: a counter
 // that went backwards (the output restarted), or a zero or backward time interval.
 StreamStats compute_stream_stats(const OutputCounters &previous, const OutputCounters &current);
+
+// How worrying a drop percentage is: above 1 % viewers start to notice, above 5 % the
+// stream is visibly broken.
+enum class DropLevel { Normal, Warning, Severe };
+DropLevel drop_level(double drop_percent);
+
+// "hh:mm:ss"; the hours keep growing past 99.
+std::string format_elapsed(std::uint64_t seconds);
 
 } // namespace multistream

@@ -2,6 +2,8 @@
 // neither the engine nor libobs objects.
 #pragma once
 
+#include "destinations/stream_stats.hpp"
+
 #include <QColor>
 #include <QPoint>
 #include <QString>
@@ -31,10 +33,14 @@ struct DestinationRowStatus {
 	RowTone tone = RowTone::Idle;
 	// Why it failed. Empty hides it.
 	QString detail;
-	// A warning that does not stop anything. Empty hides it.
+	// A warning that does not stop anything, short; its explanation goes in the tooltip.
+	// Empty hides it.
 	QString warning;
-	// Only while active. Empty hides it.
-	QString stats;
+	QString warning_hint;
+	// Only while on air. Empty hides them.
+	QString bitrate;
+	QString dropped;
+	DropLevel drop_level = DropLevel::Normal;
 	bool can_start = false;
 	bool can_stop = false;
 	bool can_edit = false;
@@ -44,6 +50,8 @@ struct DestinationRowView {
 	QString id;
 	QString name;
 	QString source;
+	// Read by screen readers for the platform icon.
+	QString platform_name;
 	// Relative to the plugin's data directory.
 	std::string icon_file;
 	// The platform's brand color; invalid when it has none. Used only when color icons are on.
@@ -61,6 +69,8 @@ public:
 	void update_status(const QString &id, const DestinationRowStatus &status);
 	void show_problem(const QString &problem);
 	void set_color_icons(bool on);
+	// Whether Start all and Stop all have anything to act on.
+	void set_bulk_actions(bool can_start_all, bool can_stop_all);
 
 signals:
 	void add_requested();
@@ -83,13 +93,16 @@ protected:
 
 private:
 	struct RowWidgets {
+		QWidget *row = nullptr;
+		QString name;
 		QLabel *handle = nullptr;
 		QLabel *icon = nullptr;
 		QLabel *dot = nullptr;
 		QLabel *state = nullptr;
 		QLabel *detail = nullptr;
 		QLabel *warning = nullptr;
-		QLabel *stats = nullptr;
+		QLabel *bitrate = nullptr;
+		QLabel *dropped = nullptr;
 		QToolButton *toggle = nullptr;
 		QMenu *menu = nullptr;
 		QToolButton *more = nullptr;
@@ -103,7 +116,7 @@ private:
 		RowTone tone = RowTone::Idle;
 	};
 
-	QWidget *create_row(const DestinationRowView &view);
+	QWidget *create_row(const DestinationRowView &view, int position);
 	void apply_status(RowWidgets &widgets, const DestinationRowStatus &status);
 	void apply_row_icons(RowWidgets &widgets);
 	void apply_row_icons_all();
@@ -122,6 +135,8 @@ private:
 	QVBoxLayout *rows_layout_ = nullptr;
 	QWidget *rows_container_ = nullptr;
 	QFrame *drop_indicator_ = nullptr;
+	QPushButton *start_all_ = nullptr;
+	QPushButton *stop_all_ = nullptr;
 	QToolButton *settings_ = nullptr;
 	QMenu *settings_menu_ = nullptr;
 	QAction *color_icons_action_ = nullptr;

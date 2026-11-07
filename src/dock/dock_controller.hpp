@@ -15,6 +15,8 @@
 #include <QPointer>
 #include <QTimer>
 
+#include <chrono>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -34,6 +36,7 @@ private:
 	void add_destination();
 	void edit_destination(const QString &id);
 	void delete_destination(const QString &id);
+	void stop_all();
 	void move_destination(const QString &id, bool up);
 	void move_destination_to(const QString &id, int insert_position);
 	void set_color_icons(bool on);
@@ -44,12 +47,19 @@ private:
 	const Destination *find(const QString &id) const;
 	SessionState state_of(const QString &id) const;
 	void refresh_rows();
+	void on_status(const DestinationStatus &status);
+	DestinationRowStatus row_status(const DestinationStatus &status);
+	// Start all / Stop all enable states, and the stats timer, which runs only while
+	// something is on air.
+	void refresh_bulk_state();
 
 	DestinationsConfig config_;
 	ConfigRepository &repository_;
 	StreamingEngine &engine_;
 	QPointer<DestinationsDock> dock_;
 	QTimer stats_timer_;
+	// When each on-air destination went live, for its elapsed time. Kept across reconnects.
+	std::map<std::string, std::chrono::steady_clock::time_point> live_since_;
 	// Last, so it closes first: no result reaches this object once destruction starts.
 	SecretWorker secret_worker_;
 };

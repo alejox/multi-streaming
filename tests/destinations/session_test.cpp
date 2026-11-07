@@ -2,6 +2,10 @@
 
 #include "test_harness.hpp"
 
+#include <cstdint>
+
+using multistream::is_on_air;
+using multistream::seconds_until;
 using multistream::Session;
 using multistream::SessionState;
 
@@ -168,4 +172,30 @@ TEST_CASE(is_running_covers_the_states_a_stop_applies_to)
 	CHECK(!is_running(SessionState::Idle));
 	CHECK(!is_running(SessionState::Stopping));
 	CHECK(!is_running(SessionState::Failed));
+}
+
+TEST_CASE(on_air_covers_live_and_reconnecting_only)
+{
+	CHECK(is_on_air(SessionState::Live));
+	CHECK(is_on_air(SessionState::Reconnecting));
+	CHECK(!is_on_air(SessionState::Idle));
+	CHECK(!is_on_air(SessionState::Starting));
+	CHECK(!is_on_air(SessionState::Stopping));
+	CHECK(!is_on_air(SessionState::Failed));
+}
+
+TEST_CASE(retry_countdown_rounds_up_to_whole_seconds)
+{
+	constexpr std::uint64_t second = 1000000000;
+	CHECK_EQ(seconds_until(10 * second, 10 * second - 1), 1);
+	CHECK_EQ(seconds_until(10 * second, 7 * second), 3);
+	CHECK_EQ(seconds_until(10 * second, 7 * second + 1), 3);
+}
+
+TEST_CASE(retry_countdown_is_zero_once_the_retry_is_due)
+{
+	constexpr std::uint64_t second = 1000000000;
+	CHECK_EQ(seconds_until(10 * second, 10 * second), 0);
+	CHECK_EQ(seconds_until(10 * second, 12 * second), 0);
+	CHECK_EQ(seconds_until(0, 5 * second), 0);
 }

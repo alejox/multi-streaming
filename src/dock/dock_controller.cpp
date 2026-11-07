@@ -13,6 +13,7 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#include <QAbstractButton>
 #include <QLocale>
 #include <QMessageBox>
 
@@ -29,7 +30,22 @@ QString text(const char *key)
 	return QString::fromUtf8(obs_module_text(key));
 }
 
-QString state_text(const DestinationStatus &status)
+// Like the one in the vertical dock, but with the confirming button named after the action;
+// Cancel is the default, so Enter never destroys anything by accident.
+bool confirm(QWidget *parent, const QString &title, const QString &question, const QString &action)
+{
+	QMessageBox box(QMessageBox::Question, title, question, QMessageBox::Yes | QMessageBox::Cancel, parent);
+	box.button(QMessageBox::Yes)->setText(action);
+	box.setDefaultButton(QMessageBox::Cancel);
+	box.setEscapeButton(QMessageBox::Cancel);
+#if defined(MULTI_STREAM_E2E_SECRETS)
+	// A native alert has no Qt widget for the test hook to answer.
+	box.setOption(QMessageBox::Option::DontUseNativeDialog);
+#endif
+	return box.exec() == QMessageBox::Yes;
+}
+
+QString state_text(const DestinationStatus &status, std::optional<std::uint64_t> live_seconds)
 {
 	switch (status.state) {
 	case SessionState::Idle:
@@ -37,8 +53,12 @@ QString state_text(const DestinationStatus &status)
 	case SessionState::Starting:
 		return text("State.Starting");
 	case SessionState::Live:
-		return text("State.Live");
+		return live_seconds ? text("State.LiveElapsed").arg(QString::fromStdString(format_elapsed(*live_seconds)))
+				    : text("State.Live");
 	case SessionState::Reconnecting:
+		if (status.reconnect_attempt > 0 && status.retry_in_seconds > 0) {
+			return text("State.ReconnectingRetry").arg(status.reconnect_attempt).arg(status.retry_in_seconds);
+		}
 		return status.reconnect_attempt > 0
 			       ? text("State.ReconnectingAttempt").arg(status.reconnect_attempt)
 			       : text("State.Reconnecting");
@@ -68,27 +88,13 @@ RowTone tone_of(SessionState state)
 	return RowTone::Idle;
 }
 
-DestinationRowStatus row_status(const DestinationStatus &status)
+SessionStates states_of(const std::vector<DestinationStatus> &statuses)
 {
-	const RowActions actions = row_actions(status.state);
-
-	DestinationRowStatus row;
-	row.state = state_text(status);
-	row.tone = tone_of(status.state);
-	row.detail = QString::fromStdString(status.failure_reason);
-	if (status.flapping) {
-		row.warning = text("Dock.FlappingWarning");
+	SessionStates states;
+	for (const DestinationStatus &status : statuses) {
+		states[status.id] = status.state;
 	}
-	row.can_start = actions.can_start;
-	row.can_stop = actions.can_stop;
-	row.can_edit = actions.can_edit;
-	if (status.state == SessionState::Live || status.state == SessionState::Reconnecting) {
-		const QString dropped = QLocale().toString(static_cast<qulonglong>(status.dropped_frames));
-		row.stats = text("Dock.Stats")
-				    .arg(QLocale().toString(status.stats.bitrate_kbps, 'f', 0), dropped,
-					 QLocale().toString(status.stats.total_drop_percent, 'f', 1));
-	}
-	return row;
+	return states;
 }
 
 } // namespace
@@ -104,11 +110,7 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 	  })
 {
 	engine_.set_destinations(config_.destinations);
-	engine_.set_status_listener([this](const DestinationStatus &status) {
-		if (dock_) {
-			dock_->update_status(QString::fromStdString(status.id), row_status(status));
-		}
-	});
+	engine_.set_status_listener([this](const DestinationStatus &status) { on_status(status); });
 
 	connect(dock, &DestinationsDock::add_requested, this, &DockController::add_destination);
 	connect(dock, &DestinationsDock::edit_requested, this, &DockController::edit_destination);
@@ -120,14 +122,14 @@ DockController::DockController(DestinationsConfig config, ConfigRepository &repo
 	connect(dock, &DestinationsDock::move_to_requested, this, &DockController::move_destination_to);
 	connect(dock, &DestinationsDock::color_icons_toggled, this, &DockController::set_color_icons);
 	connect(dock, &DestinationsDock::start_all_requested, this, [this] { engine_.start_all(); });
-	connect(dock, &DestinationsDock::stop_all_requested, this, [this] { engine_.stop_all(); });
+	connect(dock, &DestinationsDock::stop_all_requested, this, &DockController::stop_all);
 	connect(dock, &DestinationsDock::start_requested, this,
 		[this](const QString &id) { engine_.start({id.toStdString()}); });
 	connect(dock, &DestinationsDock::stop_requested, this,
 		[this](const QString &id) { engine_.stop({id.toStdString()}); });
 
+	stats_timer_.setInterval(kStatsIntervalMilliseconds);
 	connect(&stats_timer_, &QTimer::timeout, this, [this] { engine_.sample_stats(); });
-	stats_timer_.start(kStatsIntervalMilliseconds);
 
 	dock->set_color_icons(config_.color_icons);
 	refresh_rows();
@@ -164,7 +166,7 @@ void DockController::delete_destination(const QString &id)
 	}
 
 	const QString question = text("Dock.DeleteQuestion").arg(QString::fromStdString(destination->name));
-	if (QMessageBox::question(dock_, text("Dock.DeleteTitle"), question) != QMessageBox::Yes) {
+	if (!confirm(dock_, text("Dock.DeleteTitle"), question, text("Dock.Delete"))) {
 		return;
 	}
 
@@ -193,6 +195,29 @@ void DockController::delete_destination(const QString &id)
 					text("Dock.KeyNotDeleted").arg(QString::fromStdString(localize(*error))));
 			}
 		});
+}
+
+void DockController::stop_all()
+{
+	const std::vector<DestinationStatus> statuses = engine_.statuses();
+	const SessionStates states = states_of(statuses);
+	std::vector<const Destination *> on_air;
+	for (const std::string &id : select_for_stop_all(config_.destinations, states)) {
+		if (is_on_air(states.at(id))) {
+			on_air.push_back(find(QString::fromStdString(id)));
+		}
+	}
+
+	if (!on_air.empty()) {
+		const QString question =
+			on_air.size() == 1 && on_air.front() != nullptr
+				? text("Dock.StopAllQuestionOne").arg(QString::fromStdString(on_air.front()->name))
+				: text("Dock.StopAllQuestion").arg(static_cast<int>(on_air.size()));
+		if (!confirm(dock_, text("Dock.StopAllTitle"), question, text("Dock.StopAll"))) {
+			return;
+		}
+	}
+	engine_.stop_all();
 }
 
 void DockController::move_destination(const QString &id, bool up)
@@ -338,9 +363,10 @@ void DockController::refresh_rows()
 		row.id = QString::fromStdString(destination.id);
 		row.name = QString::fromStdString(destination.name);
 		row.source = text(destination.video_source == VideoSource::Vertical ? "Source.Vertical" : "Source.Main");
-		row.icon_file = std::string("icons/platforms/") +
-				platform_id(effective_platform(destination.platform, destination.server_url)) + ".svg";
-		row.brand_color = brand_color(effective_platform(destination.platform, destination.server_url));
+		const Platform platform = effective_platform(destination.platform, destination.server_url);
+		row.icon_file = std::string("icons/platforms/") + platform_id(platform) + ".svg";
+		row.brand_color = brand_color(platform);
+		row.platform_name = text((std::string("Platform.") + platform_id(platform)).c_str());
 
 		const auto status = std::find_if(statuses.begin(), statuses.end(), [&](const DestinationStatus &candidate) {
 			return candidate.id == destination.id;
@@ -351,6 +377,67 @@ void DockController::refresh_rows()
 		rows.push_back(std::move(row));
 	}
 	dock_->set_rows(rows);
+	refresh_bulk_state();
+}
+
+void DockController::on_status(const DestinationStatus &status)
+{
+	if (dock_) {
+		dock_->update_status(QString::fromStdString(status.id), row_status(status));
+	}
+	refresh_bulk_state();
+}
+
+DestinationRowStatus DockController::row_status(const DestinationStatus &status)
+{
+	std::optional<std::uint64_t> live_seconds;
+	if (is_on_air(status.state)) {
+		const auto now = std::chrono::steady_clock::now();
+		const auto since = live_since_.try_emplace(status.id, now).first->second;
+		live_seconds = static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::seconds>(now - since).count());
+	} else {
+		live_since_.erase(status.id);
+	}
+
+	const RowActions actions = row_actions(status.state);
+
+	DestinationRowStatus row;
+	row.state = state_text(status, live_seconds);
+	row.tone = tone_of(status.state);
+	row.detail = QString::fromStdString(status.failure_reason);
+	if (status.flapping) {
+		row.warning = text("Dock.FlappingWarning");
+		row.warning_hint = text("Dock.FlappingHint");
+	}
+	row.can_start = actions.can_start;
+	row.can_stop = actions.can_stop;
+	row.can_edit = actions.can_edit;
+	if (is_on_air(status.state)) {
+		const QLocale locale;
+		row.bitrate = text("Dock.StatsBitrate").arg(locale.toString(status.stats.bitrate_kbps, 'f', 0));
+		row.dropped = text("Dock.StatsDropped").arg(locale.toString(status.stats.total_drop_percent, 'f', 1));
+		row.drop_level = drop_level(status.stats.total_drop_percent);
+	}
+	return row;
+}
+
+void DockController::refresh_bulk_state()
+{
+	const std::vector<DestinationStatus> statuses = engine_.statuses();
+	const SessionStates states = states_of(statuses);
+	if (dock_) {
+		dock_->set_bulk_actions(!select_for_start_all(config_.destinations, states).empty(),
+					!select_for_stop_all(config_.destinations, states).empty());
+	}
+
+	const bool on_air = std::any_of(statuses.begin(), statuses.end(),
+					[](const DestinationStatus &status) { return is_on_air(status.state); });
+	if (on_air && !stats_timer_.isActive()) {
+		stats_timer_.start();
+	} else if (!on_air && stats_timer_.isActive()) {
+		stats_timer_.stop();
+	}
 }
 
 } // namespace multistream

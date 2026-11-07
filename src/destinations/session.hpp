@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace multistream {
@@ -10,6 +11,12 @@ const char *to_string(SessionState state);
 
 // True while an output should be running: a stop still has work to do.
 bool is_running(SessionState state);
+
+// Live or reconnecting: on air, so stopping it is something viewers notice.
+bool is_on_air(SessionState state);
+
+// Whole seconds left until a deadline, rounded up; 0 once it has passed.
+int seconds_until(std::uint64_t deadline_ns, std::uint64_t now_ns);
 
 // Lifecycle of one destination's output. Each event returns whether it was valid
 // for the current state; an invalid event changes nothing.

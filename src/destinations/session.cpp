@@ -26,6 +26,20 @@ bool is_running(SessionState state)
 	return state == SessionState::Starting || state == SessionState::Live || state == SessionState::Reconnecting;
 }
 
+bool is_on_air(SessionState state)
+{
+	return state == SessionState::Live || state == SessionState::Reconnecting;
+}
+
+int seconds_until(std::uint64_t deadline_ns, std::uint64_t now_ns)
+{
+	constexpr std::uint64_t kSecondNs = 1000000000;
+	if (deadline_ns <= now_ns) {
+		return 0;
+	}
+	return static_cast<int>((deadline_ns - now_ns + kSecondNs - 1) / kSecondNs);
+}
+
 bool Session::request_start()
 {
 	if (state_ != SessionState::Idle && state_ != SessionState::Failed) {

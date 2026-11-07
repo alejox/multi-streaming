@@ -78,6 +78,8 @@ struct StreamingEngine::Slot {
 	mutable std::mutex session_mutex;
 	Session session;
 	ReconnectHistory reconnects;
+	// When libobs tries the scheduled retry; 0 while none is scheduled.
+	std::uint64_t retry_deadline_ns = 0;
 
 	// UI thread only.
 	std::shared_ptr<OutputLink> link;
@@ -293,6 +295,7 @@ void StreamingEngine::start(const std::vector<std::string> &ids)
 				continue;
 			}
 			slot->reconnects.reset();
+			slot->retry_deadline_ns = 0;
 		}
 		slot->counters = {};
 		slot->counters.timestamp_ns = now_ns();
@@ -503,6 +506,7 @@ void StreamingEngine::on_output_started(void *data, calldata_t *)
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.output_started();
 		slot->reconnects.connected();
+		slot->retry_deadline_ns = 0;
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -534,7 +538,7 @@ void StreamingEngine::on_output_stopped(void *data, calldata_t *params)
 	});
 }
 
-void StreamingEngine::on_output_reconnecting(void *data, calldata_t *)
+void StreamingEngine::on_output_reconnecting(void *data, calldata_t *params)
 {
 	const std::shared_ptr<Slot> slot = static_cast<OutputLink *>(data)->retry_scheduled();
 	if (!slot) {
@@ -544,6 +548,10 @@ void StreamingEngine::on_output_reconnecting(void *data, calldata_t *)
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.connection_lost();
 		slot->reconnects.retry_scheduled(now_seconds());
+		// libobs waits this long before the retry it just scheduled.
+		const long long timeout_sec = calldata_int(params, "timeout_sec");
+		slot->retry_deadline_ns =
+			timeout_sec > 0 ? now_ns() + static_cast<std::uint64_t>(timeout_sec) * 1000000000ULL : 0;
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -558,6 +566,7 @@ void StreamingEngine::on_output_reconnected(void *data, calldata_t *)
 		const std::lock_guard<std::mutex> lock(slot->session_mutex);
 		slot->session.reconnected();
 		slot->reconnects.connected();
+		slot->retry_deadline_ns = 0;
 	}
 	publish_later(slot->engine, slot->destination.id);
 }
@@ -816,6 +825,9 @@ DestinationStatus StreamingEngine::status_of(const Slot &slot)
 		}
 		status.reconnect_attempt = slot.reconnects.attempt();
 		status.flapping = slot.reconnects.flapping(now_seconds());
+		if (status.state == SessionState::Reconnecting) {
+			status.retry_in_seconds = seconds_until(slot.retry_deadline_ns, now_ns());
+		}
 	}
 	if (status.state == SessionState::Live || status.state == SessionState::Reconnecting) {
 		status.stats = slot.stats;
