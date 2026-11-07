@@ -51,6 +51,7 @@ set_target_properties(multistream_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(
   multistream_adapters
   STATIC
+  persistence/atomic_file.cpp
   persistence/file_config_repository.cpp
   persistence/vertical_settings_file.cpp
   secrets/platform_secret_store.cpp

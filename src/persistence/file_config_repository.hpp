@@ -1,6 +1,7 @@
-// ConfigRepository backed by one JSON file, replaced atomically on save. A config
-// that cannot be used is never overwritten: a corrupt file is moved aside and
-// reported, and if that is impossible, saving stays refused. POSIX only.
+// ConfigRepository backed by one JSON file, replaced atomically on save with the previous
+// version kept as "<name>.bak". A config that cannot be used is never overwritten: a
+// corrupt file is moved aside and reported, and if that is impossible, saving stays
+// refused. A corrupt or missing file is replaced by its backup when that one is usable.
 #pragma once
 
 #include "destinations/config_repository.hpp"

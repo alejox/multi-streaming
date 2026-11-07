@@ -10,6 +10,7 @@
 #include <unistd.h>
 #endif
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -104,6 +105,7 @@ std::vector<std::string> names_in(const fs::path &directory)
 	for (const auto &entry : fs::directory_iterator(directory)) {
 		names.push_back(entry.path().filename().string());
 	}
+	std::sort(names.begin(), names.end());
 	return names;
 }
 
@@ -153,11 +155,14 @@ TEST_CASE(save_leaves_no_temporary_files_and_is_private_to_the_user)
 	REQUIRE(!repository.save(sample_config()).has_value());
 	REQUIRE(!repository.save(DestinationsConfig{}).has_value());
 
-	CHECK(names_in(directory.path()) == (std::vector<std::string>{"destinations.json"}));
+	CHECK(names_in(directory.path()) ==
+	      (std::vector<std::string>{"destinations.json", "destinations.json.bak"}));
 #if !defined(_WIN32)
-	struct stat info {};
-	REQUIRE(stat(path.c_str(), &info) == 0);
-	CHECK_EQ(static_cast<unsigned>(info.st_mode & 0777), 0600u);
+	for (const fs::path &file : {path, fs::path(path.string() + ".bak")}) {
+		struct stat info {};
+		REQUIRE(stat(file.c_str(), &info) == 0);
+		CHECK_EQ(static_cast<unsigned>(info.st_mode & 0777), 0600u);
+	}
 #endif
 }
 
@@ -295,4 +300,81 @@ TEST_CASE(saved_file_never_contains_a_key_placed_in_the_input)
 	REQUIRE(!load.problem.has_value());
 	REQUIRE(!repository.save(load.config).has_value());
 	CHECK(read_file(path).find("live_SECRET") == std::string::npos);
+}
+
+DestinationsConfig other_config()
+{
+	DestinationsConfig config = sample_config();
+	config.destinations.front().name = "Renamed";
+	return config;
+}
+
+TEST_CASE(a_save_keeps_the_previous_version_as_a_backup)
+{
+	TempDirectory directory;
+	const fs::path path = directory.path() / "destinations.json";
+	FileConfigRepository repository(path);
+	repository.load();
+	REQUIRE(!repository.save(sample_config()).has_value());
+	CHECK(!fs::exists(directory.path() / "destinations.json.bak"));
+
+	REQUIRE(!repository.save(other_config()).has_value());
+
+	CHECK_EQ(read_file(directory.path() / "destinations.json.bak"), encode_config(sample_config()));
+	CHECK_EQ(read_file(path), encode_config(other_config()));
+}
+
+TEST_CASE(a_corrupt_file_is_preserved_and_the_backup_is_restored)
+{
+	TempDirectory directory;
+	const fs::path path = directory.path() / "destinations.json";
+	{
+		FileConfigRepository repository(path);
+		repository.load();
+		REQUIRE(!repository.save(sample_config()).has_value());
+		REQUIRE(!repository.save(other_config()).has_value());
+	}
+	write_file(path, "{not json");
+
+	FileConfigRepository repository(path);
+	const ConfigLoad load = repository.load();
+
+	CHECK(load.config == sample_config());
+	REQUIRE(load.problem.has_value());
+	CHECK(load.problem->find("backup") != std::string::npos);
+	CHECK_EQ(read_file(directory.path() / "destinations.json.corrupt-1"), "{not json");
+	CHECK(!repository.save(load.config).has_value());
+}
+
+TEST_CASE(a_missing_file_is_restored_from_the_backup)
+{
+	TempDirectory directory;
+	const fs::path path = directory.path() / "destinations.json";
+	{
+		FileConfigRepository repository(path);
+		repository.load();
+		REQUIRE(!repository.save(sample_config()).has_value());
+		REQUIRE(!repository.save(other_config()).has_value());
+	}
+	fs::remove(path);
+
+	const ConfigLoad load = FileConfigRepository(path).load();
+
+	CHECK(load.config == sample_config());
+	REQUIRE(load.problem.has_value());
+	CHECK(load.problem->find("backup") != std::string::npos);
+}
+
+TEST_CASE(an_unusable_backup_is_ignored)
+{
+	TempDirectory directory;
+	const fs::path path = directory.path() / "destinations.json";
+	write_file(directory.path() / "destinations.json.bak", "{not json");
+
+	FileConfigRepository repository(path);
+	const ConfigLoad load = repository.load();
+
+	CHECK(load.config.destinations.empty());
+	CHECK(!load.problem.has_value());
+	CHECK(!repository.save(sample_config()).has_value());
 }

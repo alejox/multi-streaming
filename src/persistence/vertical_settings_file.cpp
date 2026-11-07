@@ -1,43 +1,39 @@
 #include "persistence/vertical_settings_file.hpp"
 
-#include <fstream>
-#include <sstream>
+#include "persistence/atomic_file.hpp"
+
 #include <system_error>
 
 namespace multistream {
+namespace {
+
+std::optional<VerticalSettings> read_settings(const std::filesystem::path &path)
+{
+	std::string text;
+	if (!read_whole_file(path, text)) {
+		return std::nullopt;
+	}
+	return decode_vertical_settings(text);
+}
+
+} // namespace
 
 VerticalSettings load_vertical_settings(const std::filesystem::path &path)
 {
-	std::ifstream file(path);
-	if (!file) {
-		return {};
+	if (auto settings = read_settings(path)) {
+		return *settings;
 	}
-	std::ostringstream text;
-	text << file.rdbuf();
-	return decode_vertical_settings(text.str()).value_or(VerticalSettings{});
+	return read_settings(backup_path(path)).value_or(VerticalSettings{});
 }
 
 std::optional<std::string> save_vertical_settings(const std::filesystem::path &path, const VerticalSettings &settings)
 {
 	std::error_code error;
 	std::filesystem::create_directories(path.parent_path(), error);
-
-	std::filesystem::path temp_path = path;
-	temp_path += ".tmp";
-	{
-		std::ofstream file(temp_path, std::ios::trunc);
-		file << encode_vertical_settings(settings);
-		file.flush();
-		if (!file) {
-			return "Could not write " + temp_path.u8string();
-		}
-	}
-
-	std::filesystem::rename(temp_path, path, error);
 	if (error) {
-		return "Could not replace " + path.u8string() + ": " + error.message();
+		return "Could not create " + path.parent_path().u8string() + ": " + error.message();
 	}
-	return std::nullopt;
+	return replace_file_keeping_backup(path, encode_vertical_settings(settings));
 }
 
 } // namespace multistream
