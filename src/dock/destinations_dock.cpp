@@ -4,8 +4,8 @@
 
 #include <obs-module.h>
 
+#include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -31,9 +32,29 @@ constexpr int kPlatformIconSize = 20;
 constexpr int kDotSize = 10;
 constexpr int kButtonIconSize = 16;
 constexpr int kHandleIconSize = 16;
+constexpr int kEmptyIconSize = 48;
 constexpr char kDestinationMime[] = "application/x-obs-multi-stream-destination";
 
-QColor tone_color(RowTone tone, const QPalette &palette)
+// The OBS theme class for each tone (Yami and its variants define them all; other themes
+// may define only some, which leaves the label in the normal text color).
+const char *tone_class(RowTone tone)
+{
+	switch (tone) {
+	case RowTone::Idle:
+		return "text-muted";
+	case RowTone::Busy:
+	case RowTone::Warning:
+		return "text-warning";
+	case RowTone::Live:
+		return "text-success";
+	case RowTone::Failed:
+		return "text-danger";
+	}
+	return "text-muted";
+}
+
+// Only for themes whose classes leave the state label in the plain text color.
+QColor fallback_tone_color(RowTone tone, const QPalette &palette)
 {
 	switch (tone) {
 	case RowTone::Idle:
@@ -50,7 +71,39 @@ QColor tone_color(RowTone tone, const QPalette &palette)
 	return palette.color(QPalette::WindowText);
 }
 
-QPixmap status_dot(RowTone tone, const QPalette &palette, qreal ratio)
+// Applies an OBS theme class; the style must be re-polished for a change to show.
+void set_theme_class(QWidget *widget, const char *name)
+{
+	if (widget->property("class").toString() == QLatin1String(name)) {
+		return;
+	}
+	widget->setProperty("class", QString::fromLatin1(name));
+	widget->style()->unpolish(widget);
+	widget->style()->polish(widget);
+}
+
+// The color the theme gave a label through its class, or the fallback when the class
+// gave it nothing of its own.
+QColor themed_text_color(QLabel *label, const QPalette &plain, const QColor &fallback)
+{
+	label->ensurePolished();
+	const QColor color = label->palette().color(QPalette::WindowText);
+	return color != plain.color(QPalette::WindowText) ? color : fallback;
+}
+
+// Lets the theme's class supply the icon (OBS's own toolbar icons) and uses the plugin's
+// monochrome icon only when the theme has none for that class.
+void apply_class_icon(QAbstractButton *button, const QIcon &fallback)
+{
+	button->setIcon(QIcon());
+	button->style()->unpolish(button);
+	button->style()->polish(button);
+	if (button->icon().isNull()) {
+		button->setIcon(fallback);
+	}
+}
+
+QPixmap status_dot(const QColor &color, qreal ratio)
 {
 	const int pixels = qRound(kDotSize * ratio);
 	QPixmap pixmap(pixels, pixels);
@@ -58,7 +111,7 @@ QPixmap status_dot(RowTone tone, const QPalette &palette, qreal ratio)
 	QPainter painter(&pixmap);
 	painter.setRenderHint(QPainter::Antialiasing);
 	painter.setPen(Qt::NoPen);
-	painter.setBrush(tone_color(tone, palette));
+	painter.setBrush(color);
 	painter.drawEllipse(pixmap.rect());
 	painter.end();
 	pixmap.setDevicePixelRatio(ratio);
@@ -80,23 +133,53 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 {
 	auto *layout = new QVBoxLayout(this);
 
-	problem_ = new QLabel(this);
+	// A notice banner, like OBS's own, closed with the inline button.
+	problem_frame_ = new QFrame(this);
+	problem_frame_->setProperty("class", "frame-notice");
+	problem_ = new QLabel(problem_frame_);
+	problem_->setProperty("class", "text-danger");
 	problem_->setWordWrap(true);
 	problem_->setTextFormat(Qt::PlainText);
 	problem_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-	problem_->hide();
-	dismiss_problem_ = new QPushButton(obs_module_text("Dock.Dismiss"), this);
-	dismiss_problem_->hide();
-	connect(dismiss_problem_, &QPushButton::clicked, this, [this] {
-		problem_->hide();
-		dismiss_problem_->hide();
-	});
-	layout->addWidget(problem_);
-	layout->addWidget(dismiss_problem_);
+	dismiss_problem_ = new QToolButton(problem_frame_);
+	dismiss_problem_->setAutoRaise(true);
+	dismiss_problem_->setProperty("class", "icon-close");
+	dismiss_problem_->setToolTip(obs_module_text("Dock.Dismiss"));
+	dismiss_problem_->setAccessibleName(obs_module_text("Dock.Dismiss"));
+	connect(dismiss_problem_, &QToolButton::clicked, problem_frame_, &QWidget::hide);
+	auto *problem_layout = new QHBoxLayout(problem_frame_);
+	problem_layout->setContentsMargins(0, 0, 0, 0);
+	problem_layout->setSpacing(4);
+	problem_layout->addWidget(problem_, 1);
+	problem_layout->addWidget(dismiss_problem_, 0, Qt::AlignTop);
+	problem_frame_->hide();
+	layout->addWidget(problem_frame_);
 
-	empty_ = new QLabel(obs_module_text("Dock.Empty"), this);
-	empty_->setWordWrap(true);
-	layout->addWidget(empty_);
+	// Shown instead of the list while there are no destinations.
+	empty_ = new QWidget(this);
+	empty_icon_ = new QLabel(empty_);
+	empty_icon_->setAlignment(Qt::AlignCenter);
+	empty_icon_->setAccessibleName(obs_module_text("Dock.Empty"));
+	empty_text_ = new QLabel(obs_module_text("Dock.Empty"), empty_);
+	empty_text_->setProperty("class", "text-muted");
+	empty_text_->setTextFormat(Qt::PlainText);
+	empty_text_->setWordWrap(true);
+	empty_text_->setAlignment(Qt::AlignCenter);
+	auto *empty_add = new QPushButton(obs_module_text("Dock.AddDestination"), empty_);
+	empty_add->setProperty("class", "button-primary");
+	connect(empty_add, &QPushButton::clicked, this, &DestinationsDock::add_requested);
+	auto *empty_button_line = new QHBoxLayout();
+	empty_button_line->addStretch();
+	empty_button_line->addWidget(empty_add);
+	empty_button_line->addStretch();
+	auto *empty_layout = new QVBoxLayout(empty_);
+	empty_layout->setSpacing(8);
+	empty_layout->addStretch();
+	empty_layout->addWidget(empty_icon_);
+	empty_layout->addWidget(empty_text_);
+	empty_layout->addLayout(empty_button_line);
+	empty_layout->addStretch();
+	layout->addWidget(empty_, 1);
 
 	auto *rows_container = new QWidget(this);
 	rows_layout_ = new QVBoxLayout(rows_container);
@@ -109,11 +192,12 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	drop_indicator_->setStyleSheet("background-color: palette(highlight);");
 	drop_indicator_->hide();
 
-	auto *scroll = new QScrollArea(this);
-	scroll->setWidgetResizable(true);
-	scroll->setFrameShape(QFrame::NoFrame);
-	scroll->setWidget(rows_container);
-	layout->addWidget(scroll, 1);
+	scroll_ = new QScrollArea(this);
+	scroll_->setWidgetResizable(true);
+	scroll_->setFrameShape(QFrame::NoFrame);
+	scroll_->setWidget(rows_container);
+	scroll_->hide();
+	layout->addWidget(scroll_, 1);
 
 	auto *add = new QPushButton(obs_module_text("Dock.Add"), this);
 	auto *start_all = new QPushButton(obs_module_text("Dock.StartAll"), this);
@@ -122,21 +206,34 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	connect(start_all, &QPushButton::clicked, this, &DestinationsDock::start_all_requested);
 	connect(stop_all, &QPushButton::clicked, this, &DestinationsDock::stop_all_requested);
 
-	color_icons_check_ = new QCheckBox(obs_module_text("Dock.ColorIcons"), this);
-	color_icons_check_->setToolTip(obs_module_text("Dock.ColorIconsHint"));
-	connect(color_icons_check_, &QCheckBox::toggled, this, [this](bool on) {
+	// Dock preferences live in a menu, so the bar holds only actions.
+	settings_menu_ = new QMenu(this);
+	settings_menu_->setToolTipsVisible(true);
+	color_icons_action_ = settings_menu_->addAction(obs_module_text("Dock.ColorIcons"));
+	color_icons_action_->setCheckable(true);
+	color_icons_action_->setToolTip(obs_module_text("Dock.ColorIconsHint"));
+	connect(color_icons_action_, &QAction::toggled, this, [this](bool on) {
 		color_icons_on_ = on;
 		apply_row_icons_all();
 		emit color_icons_toggled(on);
 	});
+	settings_ = new QToolButton(this);
+	settings_->setProperty("class", "btn-tool icon-gear");
+	settings_->setToolTip(obs_module_text("Dock.Settings"));
+	settings_->setAccessibleName(obs_module_text("Dock.Settings"));
+	connect(settings_, &QToolButton::clicked, this, [this] {
+		settings_menu_->exec(settings_->mapToGlobal(QPoint(0, settings_->height())));
+	});
 
 	auto *buttons = new QHBoxLayout();
 	buttons->addWidget(add);
-	buttons->addWidget(color_icons_check_);
 	buttons->addStretch();
 	buttons->addWidget(start_all);
 	buttons->addWidget(stop_all);
+	buttons->addWidget(settings_);
 	layout->addLayout(buttons);
+
+	apply_theme_icons();
 }
 
 void DestinationsDock::set_rows(const std::vector<DestinationRowView> &rows)
@@ -159,6 +256,7 @@ void DestinationsDock::set_rows(const std::vector<DestinationRowView> &rows)
 		rows_layout_->insertWidget(position++, create_row(view));
 	}
 	empty_->setVisible(rows.empty());
+	scroll_->setVisible(!rows.empty());
 }
 
 void DestinationsDock::update_status(const QString &id, const DestinationRowStatus &status)
@@ -172,8 +270,7 @@ void DestinationsDock::update_status(const QString &id, const DestinationRowStat
 void DestinationsDock::show_problem(const QString &problem)
 {
 	problem_->setText(problem);
-	problem_->show();
-	dismiss_problem_->show();
+	problem_frame_->show();
 }
 
 QWidget *DestinationsDock::create_row(const DestinationRowView &view)
@@ -198,7 +295,7 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	name->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
 	auto *source = new QLabel(view.source, row);
-	source->setStyleSheet("border: 1px solid palette(text); border-radius: 3px; padding: 0 4px;");
+	source->setProperty("class", "text-small text-muted");
 
 	widgets.dot = new QLabel(row);
 	widgets.state = new QLabel(row);
@@ -210,7 +307,7 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.stats->hide();
 	widgets.detail = wrapping_label(row);
 	widgets.warning = wrapping_label(row);
-	widgets.warning->setStyleSheet("color: #e88020;");
+	widgets.warning->setProperty("class", "text-warning");
 
 	widgets.toggle = new QToolButton(row);
 	widgets.toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -224,14 +321,18 @@ QWidget *DestinationsDock::create_row(const DestinationRowView &view)
 	widgets.edit = menu->addAction(obs_module_text("Dock.Edit"));
 	menu->addSeparator();
 	widgets.remove = menu->addAction(obs_module_text("Dock.Delete"));
+	widgets.menu = menu;
 	widgets.more = new QToolButton(row);
 	widgets.more->setAutoRaise(true);
-	widgets.more->setPopupMode(QToolButton::InstantPopup);
-	widgets.more->setStyleSheet("QToolButton::menu-indicator { image: none; }");
+	widgets.more->setProperty("class", "icon-dots-vert");
 	widgets.more->setIconSize(QSize(kButtonIconSize, kButtonIconSize));
 	widgets.more->setToolTip(obs_module_text("Dock.More"));
 	widgets.more->setAccessibleName(obs_module_text("Dock.More"));
-	widgets.more->setMenu(menu);
+	// Opened by hand rather than through setMenu, which adds an arrow the theme cannot hide
+	// without a local stylesheet.
+	connect(widgets.more, &QToolButton::clicked, menu, [more = widgets.more, menu] {
+		menu->exec(more->mapToGlobal(QPoint(0, more->height())));
+	});
 
 	const QString id = view.id;
 	connect(widgets.toggle, &QToolButton::clicked, this, [this, id] {
@@ -296,6 +397,7 @@ void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowSta
 	const bool changed = widgets.stops != status.can_stop || widgets.tone != status.tone;
 	widgets.stops = status.can_stop;
 	widgets.tone = status.tone;
+	set_theme_class(widgets.state, tone_class(status.tone));
 	const char *const label = status.can_stop ? "Dock.Stop" : "Dock.Start";
 	widgets.toggle->setText(obs_module_text(label));
 	widgets.toggle->setAccessibleName(obs_module_text(label));
@@ -314,18 +416,29 @@ void DestinationsDock::apply_row_icons(RowWidgets &widgets)
 					      ? widgets.brand_color
 					      : palette().color(QPalette::Active, QPalette::WindowText);
 	widgets.icon->setPixmap(colored_pixmap(widgets.icon_file.c_str(), platform_color, kPlatformIconSize, ratio));
-	widgets.dot->setPixmap(status_dot(widgets.tone, palette(), ratio));
+	const QColor dot = themed_text_color(widgets.state, palette(), fallback_tone_color(widgets.tone, palette()));
+	widgets.dot->setPixmap(status_dot(dot, ratio));
 	widgets.handle->setPixmap(themed_pixmap("icons/ui/drag.svg", palette(), kHandleIconSize, ratio));
 	widgets.toggle->setIcon(themed_icon(widgets.stops ? "icons/ui/stop.svg" : "icons/ui/start.svg", palette()));
-	widgets.more->setIcon(themed_icon("icons/ui/more.svg", palette()));
+	apply_class_icon(widgets.more, themed_icon("icons/ui/more.svg", palette()));
+}
+
+void DestinationsDock::apply_theme_icons()
+{
+	apply_class_icon(settings_, themed_icon("icons/ui/settings.svg", palette()));
+	apply_class_icon(dismiss_problem_, style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+	const qreal ratio = devicePixelRatioF();
+	const QColor muted =
+		themed_text_color(empty_text_, palette(), palette().color(QPalette::Disabled, QPalette::WindowText));
+	empty_icon_->setPixmap(colored_pixmap("icons/ui/broadcast.svg", muted, kEmptyIconSize, ratio));
 }
 
 void DestinationsDock::set_color_icons(bool on)
 {
 	color_icons_on_ = on;
-	if (color_icons_check_) {
-		const QSignalBlocker blocker(color_icons_check_);
-		color_icons_check_->setChecked(on);
+	{
+		const QSignalBlocker blocker(color_icons_action_);
+		color_icons_action_->setChecked(on);
 	}
 	apply_row_icons_all();
 }
@@ -462,7 +575,9 @@ void DestinationsDock::show_drop_indicator(int position)
 void DestinationsDock::changeEvent(QEvent *event)
 {
 	QWidget::changeEvent(event);
-	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange) {
+	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ThemeChange ||
+	    event->type() == QEvent::StyleChange) {
+		apply_theme_icons();
 		apply_row_icons_all();
 	}
 }

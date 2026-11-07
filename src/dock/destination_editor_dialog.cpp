@@ -110,11 +110,14 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 		connect_twitch_->setIconSize(QSize(16, 16));
 		connect_twitch_->setCursor(Qt::PointingHandCursor);
 		connect_twitch_->setStyleSheet(
-			QStringLiteral("QPushButton { background-color: %1; color: white; border: none;"
-				       " border-radius: 4px; padding: 6px 14px; font-weight: 600; }"
+			// Same box as OBS's Yami buttons (1 px border, 4 px radius, 3 px x 16 px padding at
+			// the default density), so it lines up with the dialog's other buttons.
+			QStringLiteral("QPushButton { background-color: %1; color: white; border: 1px solid %3;"
+				       " border-radius: 4px; padding: 3px 16px; font-weight: 600; }"
 				       "QPushButton:hover { background-color: %2; }"
 				       "QPushButton:pressed { background-color: %3; }"
-				       "QPushButton:disabled { background-color: %4; color: rgba(255,255,255,0.6); }")
+				       "QPushButton:disabled { background-color: %4; border-color: %4;"
+				       " color: rgba(255,255,255,0.6); }")
 				.arg(purple.name(), purple.lighter(115).name(), purple.darker(115).name(),
 				     purple.darker(160).name()));
 	}

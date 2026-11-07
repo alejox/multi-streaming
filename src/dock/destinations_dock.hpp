@@ -12,11 +12,13 @@
 #include <string>
 #include <vector>
 
+class QAbstractButton;
 class QAction;
 class QFrame;
-class QCheckBox;
 class QLabel;
+class QMenu;
 class QPushButton;
+class QScrollArea;
 class QToolButton;
 class QVBoxLayout;
 
@@ -89,6 +91,7 @@ private:
 		QLabel *warning = nullptr;
 		QLabel *stats = nullptr;
 		QToolButton *toggle = nullptr;
+		QMenu *menu = nullptr;
 		QToolButton *more = nullptr;
 		QAction *edit = nullptr;
 		QAction *move_up = nullptr;
@@ -104,17 +107,24 @@ private:
 	void apply_status(RowWidgets &widgets, const DestinationRowStatus &status);
 	void apply_row_icons(RowWidgets &widgets);
 	void apply_row_icons_all();
+	void apply_theme_icons();
 	void start_drag(QWidget *handle, const QString &id);
 	int drop_position(int y) const;
 	void show_drop_indicator(int position);
 
+	QFrame *problem_frame_ = nullptr;
 	QLabel *problem_ = nullptr;
-	QPushButton *dismiss_problem_ = nullptr;
-	QLabel *empty_ = nullptr;
+	QToolButton *dismiss_problem_ = nullptr;
+	QWidget *empty_ = nullptr;
+	QLabel *empty_icon_ = nullptr;
+	QLabel *empty_text_ = nullptr;
+	QScrollArea *scroll_ = nullptr;
 	QVBoxLayout *rows_layout_ = nullptr;
 	QWidget *rows_container_ = nullptr;
 	QFrame *drop_indicator_ = nullptr;
-	QCheckBox *color_icons_check_ = nullptr;
+	QToolButton *settings_ = nullptr;
+	QMenu *settings_menu_ = nullptr;
+	QAction *color_icons_action_ = nullptr;
 	bool color_icons_on_ = false;
 	std::map<QString, RowWidgets> rows_;
 	int row_count_ = 0;
