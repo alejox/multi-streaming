@@ -183,7 +183,9 @@ std::string render_powershell(const InstallPlan &plan)
 	s += "\tExpand-Archive -LiteralPath $archive -DestinationPath $extract -Force\n";
 	s += "} catch { Finish 'failed' 'cannot extract the package' }\n";
 	s += "$source = Join-Path $extract $packageRoot\n";
-	s += "if (-not (Test-Path -LiteralPath $source -PathType Container)) { Finish 'failed' 'unexpected package layout' }\n";
+	s += "if (-not (Test-Path -LiteralPath $source -PathType Container)) {\n";
+	s += "\tFinish 'failed' 'unexpected package layout'\n";
+	s += "}\n";
 	s += "\n";
 	s += "$movedAside = $false\n";
 	s += "try {\n";
