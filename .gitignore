@@ -15,7 +15,7 @@
 !/CMakePresets.json
 !/LICENSE
 !/README.md
-!/README.es.md
+!/README.en.md
 
 # Exclude macOS resource forks
 .DS_Store

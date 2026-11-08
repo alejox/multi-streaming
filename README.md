@@ -2,82 +2,82 @@
 
 # 📡 OBS Multi Stream
 
-**Stream one OBS session to many platforms at once — each from the main mix or its own vertical canvas.**
+**Transmite una sesión de OBS a muchas plataformas a la vez, cada una desde la mezcla principal o desde su propio lienzo vertical.**
 
-[![Latest release](https://img.shields.io/github/v/release/alejox/multi-streaming?label=release&color=7c3aed)](https://github.com/alejox/multi-streaming/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/alejox/multi-streaming/total?color=2563eb)](https://github.com/alejox/multi-streaming/releases)
-[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-16a34a)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20arm64%20%7C%20Windows%20x64%20%7C%20Linux%20x86__64-475569)](#-installation)
+[![Última versión](https://img.shields.io/github/v/release/alejox/multi-streaming?label=versi%C3%B3n&color=7c3aed)](https://github.com/alejox/multi-streaming/releases/latest)
+[![Descargas](https://img.shields.io/github/downloads/alejox/multi-streaming/total?label=descargas&color=2563eb)](https://github.com/alejox/multi-streaming/releases)
+[![Licencia: GPL-2.0-or-later](https://img.shields.io/badge/licencia-GPL--2.0--or--later-16a34a)](LICENSE)
+[![Plataformas](https://img.shields.io/badge/plataformas-macOS%20arm64%20%7C%20Windows%20x64%20%7C%20Linux%20x86__64-475569)](#-instalación)
 [![OBS 33](https://img.shields.io/badge/OBS-33-302e31?logo=obsstudio&logoColor=white)](https://obsproject.com)
 
-**English** | [Español](README.es.md)
+**Español** | [English](README.en.md)
 
-[⬇️ Download](https://github.com/alejox/multi-streaming/releases/latest) ·
-[🧰 Install](#-installation) ·
-[✨ Features](#-whats-included) ·
-[❓ FAQ](#-faq-and-troubleshooting)
+[⬇️ Descargar](https://github.com/alejox/multi-streaming/releases/latest) ·
+[🧰 Instalar](#-instalación) ·
+[✨ Funciones](#-qué-incluye) ·
+[❓ Preguntas frecuentes](#-preguntas-frecuentes-y-solución-de-problemas)
 
 </div>
 
 ---
 
-## ✨ What's included
+## ✨ Qué incluye
 
-| | Feature | What it does |
-|:-:|---------|--------------|
-| 🌐 | **Multi-destination streaming** | Many RTMP/RTMPS destinations, each with its own start/stop, plus **Start all** and **Stop all** |
-| 🎯 | **Service presets** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram, or a custom server. Links to the stream key page for YouTube, Twitch, Kick and Facebook |
-| 📱 | **Vertical canvas** | A second canvas (default 1080x1920) with its own scenes, sources, preview, and Fit/Fill composition, in its own dock |
-| 🎞️ | **Video source per destination** | Each destination sends the `main` mix or the `vertical` canvas |
-| ⚙️ | **Smart encoders** | Destinations share an encoder when their settings match, and get a dedicated one when they don't |
-| 🔗 | **Sync with OBS streaming** | Optionally start and stop a destination together with the main OBS stream |
-| 🟣 | **Connect with Twitch** | Log in through the browser (OAuth); the stream key is filled in and the session is remembered |
-| 🔁 | **Auto-reconnect** | Per-destination retry count and first delay, with a "next try in N s" countdown |
-| 📊 | **Live stats** | On-air time, bitrate, and dropped frames per destination, with an "unstable" warning for flapping connections |
-| 🛡️ | **Failure isolation** | A failing destination never stops the others or the main stream |
-| 🔐 | **Secure key storage** | Keys live in macOS Keychain, Windows Credential Manager, or Linux Secret Service — never in config files |
-| 🔄 | **Automatic updates** | New versions download in the background, are verified with SHA-256, and install when OBS closes |
-| 🌍 | **Translations** | Full UI in English and Spanish |
-| 🎨 | **Native look** | Follows the OBS theme, with an optional **Color icons** mode for brand-colored platform icons |
+| | Función | Qué hace |
+|:-:|---------|----------|
+| 🌐 | **Transmisión a varios destinos** | Muchos destinos RTMP/RTMPS, cada uno con su propio inicio y parada, más **Iniciar todos** y **Detener todos** |
+| 🎯 | **Servicios predefinidos** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram o un servidor personalizado. Enlaces a la página de la clave de transmisión de YouTube, Twitch, Kick y Facebook |
+| 📱 | **Lienzo vertical** | Un segundo lienzo (1080x1920 por defecto) con sus propias escenas, fuentes, vista previa y composición Ajustar/Rellenar, en su propio panel |
+| 🎞️ | **Fuente de video por destino** | Cada destino envía la mezcla `main` o el lienzo `vertical` |
+| ⚙️ | **Codificadores inteligentes** | Los destinos comparten codificador cuando su configuración coincide, y usan uno dedicado cuando no |
+| 🔗 | **Sincronización con la transmisión de OBS** | Opcionalmente, un destino inicia y se detiene junto con la transmisión principal de OBS |
+| 🟣 | **Conectar con Twitch** | Inicio de sesión en el navegador (OAuth); la clave de transmisión se completa sola y la sesión se recuerda |
+| 🔁 | **Reconexión automática** | Número de reintentos y primera espera por destino, con una cuenta atrás «siguiente intento en N s» |
+| 📊 | **Estadísticas en vivo** | Tiempo al aire, bitrate y fotogramas perdidos por destino, con un aviso de «inestable» para conexiones intermitentes |
+| 🛡️ | **Aislamiento de fallos** | Un destino que falla nunca detiene a los demás ni la transmisión principal |
+| 🔐 | **Claves guardadas de forma segura** | Las claves viven en el Llavero de macOS, el Administrador de credenciales de Windows o el Secret Service de Linux, nunca en archivos de configuración |
+| 🔄 | **Actualizaciones automáticas** | Las versiones nuevas se descargan en segundo plano, se verifican con SHA-256 y se instalan al cerrar OBS |
+| 🌍 | **Traducciones** | Interfaz completa en inglés y español |
+| 🎨 | **Aspecto nativo** | Sigue el tema de OBS, con un modo opcional **Iconos a color** para ver las plataformas con sus colores de marca |
 
 ---
 
-## 🧰 Installation
+## 🧰 Instalación
 
 > [!IMPORTANT]
-> **Close OBS before installing.** OBS cannot replace a plugin it has loaded.
+> **Cierra OBS antes de instalar.** OBS no puede reemplazar un plugin que ya cargó.
 
-| Platform | Package | Built against |
-|----------|---------|---------------|
-| 🍎 macOS (Apple Silicon) | `obs-multi-stream-<version>-macos-arm64.zip` | OBS 33.0.1 |
-| 🪟 Windows x64 | `obs-multi-stream-<version>-windows-x64.zip` | OBS 33.0.1 |
-| 🐧 Linux x86_64 | `obs-multi-stream-<version>-linux-x86_64.tar.gz` | OBS from the Ubuntu 24.04 PPA (32.2.0 at the time of writing) |
+| Plataforma | Paquete | Compilado contra |
+|------------|---------|------------------|
+| 🍎 macOS (Apple Silicon) | `obs-multi-stream-<versión>-macos-arm64.zip` | OBS 33.0.1 |
+| 🪟 Windows x64 | `obs-multi-stream-<versión>-windows-x64.zip` | OBS 33.0.1 |
+| 🐧 Linux x86_64 | `obs-multi-stream-<versión>-linux-x86_64.tar.gz` | OBS del PPA para Ubuntu 24.04 (32.2.0 al momento de escribir esto) |
 
-All packages are on the [latest release page](https://github.com/alejox/multi-streaming/releases/latest). The Windows and Linux packages also contain their install steps as `INSTALL.txt`.
+Todos los paquetes están en la [página de la última versión](https://github.com/alejox/multi-streaming/releases/latest). Los paquetes de Windows y Linux incluyen además sus pasos de instalación en `INSTALL.txt` (en inglés).
 
 <details>
 <summary><b>🍎 macOS (Apple Silicon, arm64)</b></summary>
 
 <br>
 
-1. Download `obs-multi-stream-<version>-macos-arm64.zip` from the [latest release](https://github.com/alejox/multi-streaming/releases/latest) and unzip it.
-2. Copy the `obs-multi-stream.plugin` bundle into:
+1. Descarga `obs-multi-stream-<versión>-macos-arm64.zip` desde la [última versión](https://github.com/alejox/multi-streaming/releases/latest) y descomprímelo.
+2. Copia el paquete `obs-multi-stream.plugin` en:
 
    ```text
    ~/Library/Application Support/obs-studio/plugins/
    ```
 
-   In Finder, press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>G</kbd> and paste the path. Create the `plugins` folder if it does not exist.
-3. Open OBS and check [that it loaded](#-check-that-it-loaded).
+   En Finder, pulsa <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>G</kbd> y pega la ruta. Crea la carpeta `plugins` si no existe.
+3. Abre OBS y comprueba [que se cargó](#-comprueba-que-se-cargó).
 
 > [!WARNING]
-> **The macOS package is ad-hoc signed and not notarized.** Gatekeeper may quarantine it after download. If macOS refuses to load it, clear the flag:
+> **El paquete de macOS tiene firma ad hoc y no está notarizado.** Gatekeeper puede ponerlo en cuarentena tras la descarga. Si macOS se niega a cargarlo, quita la marca:
 >
 > ```bash
 > xattr -dr com.apple.quarantine ~/Library/Application\ Support/obs-studio/plugins/obs-multi-stream.plugin
 > ```
 
-**Uninstall:** delete `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin`. See [Uninstall](#-uninstall) for the data it leaves behind.
+**Desinstalar:** borra `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin`. Consulta [Desinstalación](#-desinstalación) para los datos que deja.
 
 </details>
 
@@ -86,20 +86,20 @@ All packages are on the [latest release page](https://github.com/alejox/multi-st
 
 <br>
 
-1. Download `obs-multi-stream-<version>-windows-x64.zip` from the [latest release](https://github.com/alejox/multi-streaming/releases/latest).
-2. Extract the `obs-multi-stream` folder into:
+1. Descarga `obs-multi-stream-<versión>-windows-x64.zip` desde la [última versión](https://github.com/alejox/multi-streaming/releases/latest).
+2. Extrae la carpeta `obs-multi-stream` en:
 
    ```text
    C:\ProgramData\obs-studio\plugins\
    ```
 
-   The result is `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`.
-3. Open OBS and check [that it loaded](#-check-that-it-loaded).
+   El resultado es `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`.
+3. Abre OBS y comprueba [que se cargó](#-comprueba-que-se-cargó).
 
 > [!NOTE]
-> **Windows needs OBS 33 or later.** OBS refuses a plugin built against a newer libobs than its own.
+> **Windows necesita OBS 33 o posterior.** OBS rechaza un plugin compilado contra una libobs más nueva que la suya.
 
-**Uninstall:** delete `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`. See [Uninstall](#-uninstall) for the data it leaves behind.
+**Desinstalar:** borra `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`. Consulta [Desinstalación](#-desinstalación) para los datos que deja.
 
 </details>
 
@@ -108,253 +108,253 @@ All packages are on the [latest release page](https://github.com/alejox/multi-st
 
 <br>
 
-1. Download `obs-multi-stream-<version>-linux-x86_64.tar.gz` from the [latest release](https://github.com/alejox/multi-streaming/releases/latest).
-2. Extract it into your per-user plugin folder:
+1. Descarga `obs-multi-stream-<versión>-linux-x86_64.tar.gz` desde la [última versión](https://github.com/alejox/multi-streaming/releases/latest).
+2. Extráelo en tu carpeta de plugins de usuario:
 
    ```bash
    mkdir -p ~/.config/obs-studio/plugins
-   tar -xzf obs-multi-stream-<version>-linux-x86_64.tar.gz -C ~/.config/obs-studio/plugins
+   tar -xzf obs-multi-stream-<versión>-linux-x86_64.tar.gz -C ~/.config/obs-studio/plugins
    ```
 
-3. Open OBS and check [that it loaded](#-check-that-it-loaded).
+3. Abre OBS y comprueba [que se cargó](#-comprueba-que-se-cargó).
 
-| Requirement | Why |
-|-------------|-----|
-| glibc 2.39 and Qt 6.4 or later (as on Ubuntu 24.04) | The package is built on Ubuntu 24.04 |
-| `libsecret` plus a running Secret Service (GNOME Keyring or KWallet) | Without one, stream keys cannot be saved. They are never kept in plain text |
+| Requisito | Por qué |
+|-----------|---------|
+| glibc 2.39 y Qt 6.4 o posterior (como en Ubuntu 24.04) | El paquete se compila en Ubuntu 24.04 |
+| `libsecret` y un Secret Service en ejecución (GNOME Keyring o KWallet) | Sin él no se pueden guardar las claves de transmisión. Nunca se guardan en texto plano |
 
 > [!NOTE]
-> The OBS Project PPA has no OBS 33 for Ubuntu 24.04, so the Linux package is built against the OBS version the PPA ships. See [Known limits](#-known-limits).
+> El PPA de OBS Project no tiene OBS 33 para Ubuntu 24.04, así que el paquete de Linux se compila contra la versión de OBS que publica el PPA. Consulta [Límites conocidos](#-límites-conocidos).
 
-**Uninstall:** delete `~/.config/obs-studio/plugins/obs-multi-stream/`. See [Uninstall](#-uninstall) for the data it leaves behind.
+**Desinstalar:** borra `~/.config/obs-studio/plugins/obs-multi-stream/`. Consulta [Desinstalación](#-desinstalación) para los datos que deja.
 
 </details>
 
-### ✅ Check that it loaded
+### ✅ Comprueba que se cargó
 
-| Where | What you should see |
-|-------|---------------------|
-| **Docks** menu | **Multi Stream** and **Vertical canvas** entries |
-| **Help > Log Files > View Current Log** | A line containing `[obs-multi-stream] loaded version` |
+| Dónde | Qué deberías ver |
+|-------|------------------|
+| Menú **Paneles** (Docks) | Las entradas **Multi Stream** y **Lienzo vertical** |
+| **Ayuda > Archivos de registro > Ver registro actual** | Una línea con `[obs-multi-stream] loaded version` |
 
 > [!CAUTION]
-> **The first load changes your scene collection.** The plugin adds a canvas named `obs-multi-stream-vertical`, and removing the plugin does not remove it. See [Uninstall](#-uninstall).
+> **La primera carga modifica tu colección de escenas.** El plugin añade un lienzo llamado `obs-multi-stream-vertical`, y desinstalar el plugin no lo elimina. Consulta [Desinstalación](#-desinstalación).
 
 ---
 
-## 🚀 Quick start
+## 🚀 Inicio rápido
 
-Your first multistream in three steps:
+Tu primera multitransmisión en tres pasos:
 
-1. **Add a destination.** Open **Docks > Multi Stream**, click **Add destination**, pick a service, and paste the stream key (or click **Connect with Twitch**).
-2. **Choose the video.** Set **Video source** to `main`, or to `vertical` and arrange that canvas in **Docks > Vertical canvas**.
-3. **Go live.** Press the row's start button or **Start all**. To follow the main stream, turn on **Start and stop with OBS streaming** in the destination.
+1. **Añade un destino.** Abre **Paneles > Multi Stream**, haz clic en **Añadir destino**, elige un servicio y pega la clave de transmisión (o haz clic en **Conectar con Twitch**).
+2. **Elige el video.** Pon **Fuente de video** en `main`, o en `vertical` y organiza ese lienzo en **Paneles > Lienzo vertical**.
+3. **Sal en vivo.** Pulsa el botón de inicio de la fila o **Iniciar todos**. Para seguir la transmisión principal, activa **Iniciar y detener con la transmisión de OBS** en el destino.
 
 > [!TIP]
-> Audio always comes from the main mix. A source added only to the vertical canvas is silent on every destination, which keeps vertical-only audio out of the main stream.
+> El audio siempre sale de la mezcla principal. Una fuente añadida solo al lienzo vertical queda en silencio en todos los destinos, lo que evita que el audio exclusivo del vertical llegue a la transmisión principal.
 
 ---
 
-## 🔄 Automatic updates
+## 🔄 Actualizaciones automáticas
 
-The plugin keeps itself up to date without touching a running OBS.
+El plugin se mantiene al día sin tocar un OBS en ejecución.
 
 ```mermaid
 flowchart LR
-    A[OBS starts] -->|about 8 s later| B{Newer release<br>on GitHub?}
-    B -- no --> Z[Nothing to do]
-    B -- yes --> C[Download the package<br>for this platform]
-    C --> D{SHA-256<br>matches?}
-    D -- no --> F[Discard it]
-    D -- yes --> E[Dock: update ready,<br>installs when OBS closes]
-    E --> G[OBS closes]
-    G --> H[Helper waits for OBS to exit<br>and moves the current version aside]
-    H --> I{Install<br>succeeded?}
-    I -- yes --> J[New version on next launch]
-    I -- no --> K[Previous version restored]
+    A[OBS inicia] -->|unos 8 s después| B{¿Hay una versión<br>nueva en GitHub?}
+    B -- no --> Z[Nada que hacer]
+    B -- sí --> C[Descarga el paquete<br>de esta plataforma]
+    C --> D{¿Coincide<br>el SHA-256?}
+    D -- no --> F[Se descarta]
+    D -- sí --> E[Panel: actualización lista,<br>se instala al cerrar OBS]
+    E --> G[OBS se cierra]
+    G --> H[Un asistente espera a que OBS salga<br>y aparta la versión actual]
+    H --> I{¿Se instaló<br>bien?}
+    I -- sí --> J[Versión nueva en el próximo inicio]
+    I -- no --> K[Se restaura la versión anterior]
 ```
 
-| Dock shows | Meaning |
-|------------|---------|
-| *Update X available* | A newer release exists |
-| *Downloading update X…* | The package is downloading in the background |
-| *Update X ready — installs when OBS closes* | Verified and staged; close OBS to install |
-| *Could not check for updates* + **Retry** | The check failed; nothing was changed |
-| **Download** link | This install cannot update itself; get the package from the release page |
+| El panel muestra | Significado |
+|------------------|-------------|
+| *Actualización X disponible* | Existe una versión más nueva |
+| *Descargando la actualización X…* | El paquete se descarga en segundo plano |
+| *Actualización X lista: se instala al cerrar OBS* | Verificada y preparada; cierra OBS para instalarla |
+| *No se pudo buscar actualizaciones* + **Reintentar** | La comprobación falló; no se cambió nada |
+| Enlace **Descargar** | Esta instalación no puede actualizarse sola; descarga el paquete desde la página de versiones |
 
-**Turn it off:** open the gear (**Dock settings**) menu in the Multi Stream dock and uncheck **Install updates automatically**.
+**Desactivarlo:** abre el menú del engranaje (**Ajustes del panel**) en el panel Multi Stream y desmarca **Instalar actualizaciones automáticamente**.
 
 > [!NOTE]
-> Only installs inside a writable `obs-studio/plugins/<name>` folder (per-user, or `C:\ProgramData` on Windows) update themselves. Other installs, and any version that once failed to install, get the **Download** link instead.
+> Solo se actualizan solas las instalaciones dentro de una carpeta `obs-studio/plugins/<nombre>` con permiso de escritura (la del usuario, o `C:\ProgramData` en Windows). Las demás instalaciones, y cualquier versión que alguna vez falló al instalarse, muestran el enlace **Descargar**.
 
 ---
 
-## 💡 Good to know
+## 💡 Conviene saber
 
-| Topic | Behavior |
-|-------|----------|
-| Scope | Destinations are global, not per OBS profile |
-| **Include in Start all** | Governs **Start all** and sync only; a row start always works |
-| Server URLs | URLs with userinfo, a query, or a fragment are rejected so a key cannot leak into the config file. Put a needed query string in the key field |
-| Corrupt config | A config with a wrong type or out-of-range value is moved aside as `destinations.json.corrupt-N` and the dock reports it |
-| Dedicated audio | AAC at a fixed 160 kbps |
-| Synced destinations | Use dedicated encoders, because OBS signals the start before the main encoders are active |
-| Reconnect limits | libobs fixes the growth factor and the 15-minute cap |
-| Vertical resolution | Presets 1080x1920, 720x1280, 1440x2560, or custom; cannot change while a vertical destination is live |
-
----
-
-## ❓ FAQ and troubleshooting
-
-<details>
-<summary><b>The Multi Stream dock does not appear</b></summary>
-
-<br>
-
-1. Make sure the folder is in the exact path from [Installation](#-installation) (macOS: the `.plugin` bundle itself, not a folder around it).
-2. Search the OBS log for `[obs-multi-stream]`.
-3. On macOS, clear the quarantine flag (see the macOS install section).
-4. On Windows, make sure OBS is version 33 or later.
-
-</details>
-
-<details>
-<summary><b>"Connect with Twitch" does not work</b></summary>
-
-<br>
-
-The login listens on `http://localhost:8090/` through `http://localhost:8094/`, in that order. Every one of those must be registered as an OAuth Redirect URL in the Twitch app at dev.twitch.tv/console. The Client ID lives in `src/oauth/twitch_client_id.hpp`. The login times out after 5 minutes.
-
-</details>
-
-<details>
-<summary><b>Saving a stream key fails on Linux</b></summary>
-
-<br>
-
-No Secret Service is running. Start GNOME Keyring or KWallet. The plugin fails loudly instead of falling back to plain text.
-
-</details>
-
-<details>
-<summary><b>A vertical-only source has no sound</b></summary>
-
-<br>
-
-By design: audio always comes from the main mix. Add the audio source to the main scene.
-
-</details>
-
-<details>
-<summary><b>The dock only shows a "Download" link instead of updating</b></summary>
-
-<br>
-
-The install is outside a writable `obs-studio/plugins/<name>` folder, or a previous update failed to install. Download the package from the [latest release](https://github.com/alejox/multi-streaming/releases/latest) and install it by hand.
-
-</details>
-
-<details>
-<summary><b>OBS takes a while to close</b></summary>
-
-<br>
-
-A peer that never answers the RTMP handshake delays exit by about 22 s, and the UI waits up to 5 s for stopped outputs at exit, a profile change, or a collection change.
-
-</details>
+| Tema | Comportamiento |
+|------|----------------|
+| Alcance | Los destinos son globales, no por perfil de OBS |
+| **Incluir en Iniciar todos** | Solo afecta a **Iniciar todos** y a la sincronización; iniciar una fila siempre funciona |
+| URLs del servidor | Se rechazan las URLs con credenciales, consulta o fragmento, para que ninguna clave llegue al archivo de configuración. Si el servidor necesita una consulta, ponla en el campo de la clave |
+| Configuración corrupta | Una configuración con un tipo incorrecto o un valor fuera de rango se aparta como `destinations.json.corrupt-N` y el panel lo avisa |
+| Audio dedicado | AAC a 160 kbps fijos |
+| Destinos sincronizados | Usan codificadores dedicados, porque OBS avisa del inicio antes de que los codificadores principales estén activos |
+| Límites de reconexión | libobs fija el factor de crecimiento y el tope de 15 minutos |
+| Resolución vertical | Preajustes 1080x1920, 720x1280, 1440x2560 o personalizada; no puede cambiar mientras un destino vertical está en vivo |
 
 ---
 
-## 🧹 Uninstall
-
-Removing the plugin leaves data behind. OBS still loads cleanly and the main stream still works with it present.
+## ❓ Preguntas frecuentes y solución de problemas
 
 <details>
-<summary><b>What is left behind and how to remove it</b></summary>
+<summary><b>No aparece el panel Multi Stream</b></summary>
 
 <br>
 
-| Residue | Location | Cleanup |
-|---------|----------|---------|
-| Plugin | macOS: `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin`<br>Windows: `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugins/obs-multi-stream/` | Delete it |
-| Config and staged updates | macOS: `~/Library/Application Support/obs-studio/plugin_config/obs-multi-stream/`<br>Windows: `%APPDATA%\obs-studio\plugin_config\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugin_config/obs-multi-stream/` | Delete it |
-| Canvas and its scenes | Scene collection JSON: the `canvases[]` entry `obs-multi-stream-vertical` and the `sources` entries with its `canvas_uuid` | Back up the file, then with OBS closed remove those entries |
-| Stream keys | macOS: Keychain service `com.alejox.obs-multi-stream`<br>Windows: Credential Manager targets starting with `obs-multi-stream/`<br>Linux: Secret Service items with `service` = `com.alejox.obs-multi-stream` | Delete them in Keychain Access, Credential Manager, or Seahorse |
+1. Comprueba que la carpeta está en la ruta exacta de [Instalación](#-instalación) (en macOS, el propio paquete `.plugin`, no una carpeta que lo contenga).
+2. Busca `[obs-multi-stream]` en el registro de OBS.
+3. En macOS, quita la marca de cuarentena (ver la sección de instalación en macOS).
+4. En Windows, comprueba que OBS es la versión 33 o posterior.
 
-The manual collection cleanup has been tested once.
+</details>
+
+<details>
+<summary><b>«Conectar con Twitch» no funciona</b></summary>
+
+<br>
+
+El inicio de sesión escucha en `http://localhost:8090/` hasta `http://localhost:8094/`, en ese orden. Cada una debe estar registrada como OAuth Redirect URL en la aplicación de Twitch en dev.twitch.tv/console. El Client ID está en `src/oauth/twitch_client_id.hpp`. El inicio de sesión expira a los 5 minutos.
+
+</details>
+
+<details>
+<summary><b>No se puede guardar una clave en Linux</b></summary>
+
+<br>
+
+No hay un Secret Service en ejecución. Inicia GNOME Keyring o KWallet. El plugin falla de forma visible en lugar de recurrir al texto plano.
+
+</details>
+
+<details>
+<summary><b>Una fuente solo del vertical no tiene sonido</b></summary>
+
+<br>
+
+Es intencional: el audio siempre sale de la mezcla principal. Añade la fuente de audio a la escena principal.
+
+</details>
+
+<details>
+<summary><b>El panel solo muestra un enlace «Descargar» en lugar de actualizarse</b></summary>
+
+<br>
+
+La instalación está fuera de una carpeta `obs-studio/plugins/<nombre>` con permiso de escritura, o una actualización anterior falló al instalarse. Descarga el paquete desde la [última versión](https://github.com/alejox/multi-streaming/releases/latest) e instálalo a mano.
+
+</details>
+
+<details>
+<summary><b>OBS tarda en cerrarse</b></summary>
+
+<br>
+
+Un servidor que nunca responde al saludo RTMP retrasa la salida unos 22 s, y la interfaz espera hasta 5 s a que las salidas se detengan al salir, al cambiar de perfil o al cambiar de colección.
 
 </details>
 
 ---
 
-## 🚧 Known limits
+## 🧹 Desinstalación
+
+Quitar el plugin deja datos atrás. OBS sigue cargando sin problemas y la transmisión principal sigue funcionando con ellos.
 
 <details>
-<summary><b>Limits and verification status</b></summary>
+<summary><b>Qué queda y cómo eliminarlo</b></summary>
 
 <br>
 
-**Limits**
+| Residuo | Ubicación | Limpieza |
+|---------|-----------|----------|
+| Plugin | macOS: `~/Library/Application Support/obs-studio/plugins/obs-multi-stream.plugin`<br>Windows: `C:\ProgramData\obs-studio\plugins\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugins/obs-multi-stream/` | Bórralo |
+| Configuración y actualizaciones preparadas | macOS: `~/Library/Application Support/obs-studio/plugin_config/obs-multi-stream/`<br>Windows: `%APPDATA%\obs-studio\plugin_config\obs-multi-stream\`<br>Linux: `~/.config/obs-studio/plugin_config/obs-multi-stream/` | Bórralo |
+| Lienzo y sus escenas | JSON de la colección de escenas: la entrada `canvases[]` `obs-multi-stream-vertical` y las entradas de `sources` con su `canvas_uuid` | Haz una copia del archivo y, con OBS cerrado, elimina esas entradas |
+| Claves de transmisión | macOS: servicio del Llavero `com.alejox.obs-multi-stream`<br>Windows: destinos del Administrador de credenciales que empiezan por `obs-multi-stream/`<br>Linux: elementos del Secret Service con `service` = `com.alejox.obs-multi-stream` | Bórralas en Acceso a Llaveros, el Administrador de credenciales o Seahorse |
 
-- The Canvas API is officially unstable in OBS 33.0.1. macOS and Windows builds are pinned to that version; other OBS versions are untested.
-- The Linux package is built against OBS 32.2.0, an untested version for an unstable API. The functions the plugin calls have the same declarations in both versions, which says nothing about their behavior.
-- Only macOS arm64 has been run inside OBS. Windows x64 and Linux x86_64 are compile-tested and unit-tested in CI only.
-- Raw error text from Keychain, Credential Manager, or Secret Service is shown untranslated after a translated summary.
-- Exit during a blocked Keychain read can report leaks.
-- Updates are not code-signed, and there is no prerelease channel. A Program Files style install that needs elevation gets a download link instead.
-
-**Verification status**
-
-| Check | Result |
-|-------|--------|
-| Core tests | ✅ 38 of 38 pass |
-| Plugin loads and unloads in OBS 33.0.1 (macOS) | ✅ Pass |
-| Main and vertical streaming together | ✅ Pass: 640x360 and 1080x1920 on local RTMP sinks |
-| Retries exhausted, closed port, exit while live | ✅ Pass, repeated runs |
-| Three VideoToolbox sessions at once | ✅ Pass; higher counts untested |
-| Update installer script (install, broken archive, bad layout, rollback) | ✅ Pass on macOS (sh); the PowerShell script is string-tested only |
-| Windows and Linux in CI: compile, core tests, package | ✅ Pass |
-| Dock, editor, and vertical canvas UI by hand | ⏳ Not checked |
-| Update banner and real install-on-exit | ⏳ Not checked |
-| Metal renderer | ⏳ Not tested; all runs used OpenGL |
-| Real Keychain prompt during start | ⏳ Not tested |
-| Real streaming services | ⏳ Not tested; local sinks only |
-| Windows and Linux inside OBS, including X11 and Wayland previews | ⏳ Not tested |
+La limpieza manual de la colección se ha probado una vez.
 
 </details>
 
 ---
 
-## 🧑‍💻 Development
+## 🚧 Límites conocidos
 
 <details>
-<summary><b>Architecture</b></summary>
+<summary><b>Límites y estado de verificación</b></summary>
 
 <br>
 
-The core has no OBS or Qt headers, so its rules are tested without running OBS.
+**Límites**
 
-| Path | Role |
-|------|------|
-| `src/destinations/` | Core: model, validation, codec, ports, stats, session state, encoder plan |
-| `src/persistence/` | Atomic config file repository |
-| `src/secrets/` | Keychain, Credential Manager and Secret Service adapters, and test stores |
-| `src/streaming/` | libobs outputs, services, encoders, main-stream sync |
-| `src/vertical_canvas/` | Canvas lifecycle, scenes, composition, render |
-| `src/oauth/` | Twitch login and HTTPS client |
-| `src/update/` | Release check, download, staging, install-on-exit plan |
-| `src/dock/` | Qt docks and editor |
-| `src/plugin_main.cpp` | Composition root |
-| `tests/` | Core tests through CTest |
+- La API de Canvas es oficialmente inestable en OBS 33.0.1. Las compilaciones de macOS y Windows están fijadas a esa versión; otras versiones de OBS no están probadas.
+- El paquete de Linux se compila contra OBS 32.2.0, una versión no probada para una API inestable. Las funciones que llama el plugin tienen las mismas declaraciones en ambas versiones, lo que no dice nada de su comportamiento.
+- Solo macOS arm64 se ha ejecutado dentro de OBS. Windows x64 y Linux x86_64 solo se compilan y pasan las pruebas unitarias en CI.
+- El texto de error del Llavero, el Administrador de credenciales o el Secret Service se muestra sin traducir, tras un resumen traducido.
+- Salir durante una lectura bloqueada del Llavero puede reportar fugas de memoria.
+- Las actualizaciones no están firmadas y no hay canal de versiones preliminares. Una instalación tipo Program Files que necesita elevación recibe un enlace de descarga.
+
+**Estado de verificación**
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| Pruebas del núcleo | ✅ 38 de 38 pasan |
+| El plugin carga y descarga en OBS 33.0.1 (macOS) | ✅ Pasa |
+| Transmisión principal y vertical a la vez | ✅ Pasa: 640x360 y 1080x1920 en receptores RTMP locales |
+| Reintentos agotados, puerto cerrado, salir en vivo | ✅ Pasa, varias ejecuciones |
+| Tres sesiones de VideoToolbox a la vez | ✅ Pasa; más sesiones sin probar |
+| Script de instalación de actualizaciones (instalación, archivo dañado, estructura incorrecta, reversión) | ✅ Pasa en macOS (sh); el script de PowerShell solo se prueba como texto |
+| Windows y Linux en CI: compilación, pruebas del núcleo, paquete | ✅ Pasa |
+| Interfaz del panel, el editor y el lienzo vertical a mano | ⏳ Sin comprobar |
+| Aviso de actualización e instalación real al cerrar | ⏳ Sin comprobar |
+| Renderizador Metal | ⏳ Sin probar; todas las ejecuciones usaron OpenGL |
+| Solicitud real del Llavero al iniciar | ⏳ Sin probar |
+| Servicios de transmisión reales | ⏳ Sin probar; solo receptores locales |
+| Windows y Linux dentro de OBS, incluidas las vistas previas en X11 y Wayland | ⏳ Sin probar |
+
+</details>
+
+---
+
+## 🧑‍💻 Desarrollo
+
+<details>
+<summary><b>Arquitectura</b></summary>
+
+<br>
+
+El núcleo no incluye cabeceras de OBS ni de Qt, así que sus reglas se prueban sin ejecutar OBS.
+
+| Ruta | Función |
+|------|---------|
+| `src/destinations/` | Núcleo: modelo, validación, códec, puertos, estadísticas, estado de sesión, plan de codificadores |
+| `src/persistence/` | Repositorio atómico del archivo de configuración |
+| `src/secrets/` | Adaptadores del Llavero, el Administrador de credenciales y el Secret Service, y almacenes de prueba |
+| `src/streaming/` | Salidas, servicios y codificadores de libobs, sincronización con la transmisión principal |
+| `src/vertical_canvas/` | Ciclo de vida del lienzo, escenas, composición, renderizado |
+| `src/oauth/` | Inicio de sesión de Twitch y cliente HTTPS |
+| `src/update/` | Comprobación de versiones, descarga, preparación, plan de instalación al cerrar |
+| `src/dock/` | Paneles de Qt y editor |
+| `src/plugin_main.cpp` | Raíz de composición |
+| `tests/` | Pruebas del núcleo con CTest |
 
 </details>
 
 <details>
-<summary><b>Build on macOS</b></summary>
+<summary><b>Compilar en macOS</b></summary>
 
 <br>
 
-Requires macOS 13+, OBS 33.0.1, Xcode 26.5+, and CMake. With OBS closed:
+Requiere macOS 13+, OBS 33.0.1, Xcode 26.5+ y CMake. Con OBS cerrado:
 
 ```bash
 cmake --preset macos
@@ -365,11 +365,11 @@ cmake --install build_macos --config RelWithDebInfo
 </details>
 
 <details>
-<summary><b>Build on Linux</b></summary>
+<summary><b>Compilar en Linux</b></summary>
 
 <br>
 
-Linux builds against system packages rather than `buildspec.json`, so the plugin links the libobs that OBS itself loads. On Ubuntu 24.04:
+Linux compila contra los paquetes del sistema en lugar de `buildspec.json`, para que el plugin enlace la misma libobs que carga OBS. En Ubuntu 24.04:
 
 ```bash
 sudo add-apt-repository ppa:obsproject/obs-studio
@@ -384,7 +384,7 @@ cmake --install build_linux
 </details>
 
 <details>
-<summary><b>Tests</b></summary>
+<summary><b>Pruebas</b></summary>
 
 <br>
 
@@ -394,23 +394,23 @@ cmake --build build_tests
 ctest --test-dir build_tests --output-on-failure
 ```
 
-- The Secret Service test is skipped when no service is reachable. Set `MULTI_STREAM_REQUIRE_SECRET_SERVICE=1` to make that a failure, as CI does.
-- Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate build directory. It reads fake keys from a file and adds a test command hook. It is off by default, the code is excluded at compile time, and installing such a build fails on purpose.
+- La prueba del Secret Service se omite cuando no hay servicio disponible. Define `MULTI_STREAM_REQUIRE_SECRET_SERVICE=1` para que eso sea un fallo, como hace CI.
+- Las pruebas de ejecución usan la opción de CMake `MULTI_STREAM_E2E_SECRETS` en un directorio de compilación aparte. Lee claves falsas desde un archivo y añade un gancho de comandos de prueba. Está desactivada por defecto, el código se excluye al compilar e instalar esa compilación falla a propósito.
 
 </details>
 
 ---
 
-## 📄 License
+## 📄 Licencia
 
-GPL-2.0-or-later. See [LICENSE](LICENSE).
+GPL-2.0-or-later. Consulta [LICENSE](LICENSE).
 
-- Build files in `cmake/` derive from [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate); see [cmake/NOTICE](cmake/NOTICE).
-- Platform icons come from [Simple Icons](https://simple-icons.org) (CC0); see [data/icons/NOTICE](data/icons/NOTICE).
-- The design learned from [Aitum Vertical](https://github.com/Aitum/obs-vertical-canvas) and [Multiple RTMP Outputs](https://github.com/sorayuki/obs-multi-rtmp). This project is not affiliated with either.
+- Los archivos de compilación de `cmake/` derivan de [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate); consulta [cmake/NOTICE](cmake/NOTICE).
+- Los iconos de plataformas vienen de [Simple Icons](https://simple-icons.org) (CC0); consulta [data/icons/NOTICE](data/icons/NOTICE).
+- El diseño aprendió de [Aitum Vertical](https://github.com/Aitum/obs-vertical-canvas) y [Multiple RTMP Outputs](https://github.com/sorayuki/obs-multi-rtmp). Este proyecto no está afiliado a ninguno de los dos.
 
 <div align="center">
 
-<sub>Made for streamers who are everywhere at once. ⭐ Star the repo if it helps you.</sub>
+<sub>Hecho para quienes transmiten en todas partes a la vez. ⭐ Dale una estrella al repo si te resulta útil.</sub>
 
 </div>
