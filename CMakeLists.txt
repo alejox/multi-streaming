@@ -51,6 +51,8 @@ target_sources(
     src/plugin_main.cpp
     src/streaming/main_stream_encoders.cpp
     src/streaming/streaming_engine.cpp
+    src/update/https_download.cpp
+    src/update/update_service.cpp
     src/vertical_canvas/vertical_canvas.cpp
 )
 

@@ -39,6 +39,7 @@ add_library(
   oauth/twitch_helix.cpp
   oauth/twitch_oauth.cpp
   oauth/twitch_token_store.cpp
+  update/staging.cpp
   update/update_check.cpp
   vertical_canvas/preview_geometry.cpp
   vertical_canvas/source_catalog.cpp

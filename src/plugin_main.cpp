@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "secrets/platform_secret_store.hpp"
 #include "streaming/localized_text.hpp"
 #include "streaming/streaming_engine.hpp"
+#include "update/update_service.hpp"
 #include "vertical_canvas/vertical_canvas.hpp"
 
 #include <obs-frontend-api.h>
@@ -55,6 +56,8 @@ namespace {
 
 constexpr const char *kDockId = "obs-multi-stream-destinations";
 constexpr const char *kVerticalDockId = "obs-multi-stream-vertical";
+// Lets OBS finish starting, and the user see the main window, before the network check.
+constexpr int kUpdateCheckDelayMs = 8000;
 
 // In UTF-8, as libobs returns it. Convert with u8path: on Windows a std::filesystem::path
 // built from a plain string assumes the system code page instead.
@@ -74,6 +77,25 @@ void prevent_dock_minimize(QWidget *content)
 	if (auto *dock_widget = qobject_cast<QDockWidget *>(content->parentWidget())) {
 		dock_widget->setWindowFlag(Qt::WindowMinimizeButtonHint, false);
 	}
+}
+
+std::unique_ptr<multistream::UpdateService> make_update_service(bool enabled)
+{
+	multistream::UpdateServiceConfig config;
+	config.current_version = PLUGIN_VERSION;
+	config.staging_dir = std::filesystem::u8path(module_config_path("update"));
+	config.result_file = std::filesystem::u8path(module_config_path("update-result.txt"));
+	config.platform = multistream::current_update_platform();
+	const char *binary = obs_get_module_binary_path(obs_current_module());
+	if (binary != nullptr && config.platform) {
+		if (const auto root = multistream::install_root_from_binary(binary, *config.platform)) {
+			config.install_root = std::filesystem::u8path(*root);
+		}
+	}
+	if (!config.install_root) {
+		obs_log(LOG_INFO, "updates can only be installed manually from %s", binary ? binary : "(unknown)");
+	}
+	return std::make_unique<multistream::UpdateService>(std::move(config), enabled);
 }
 
 std::unique_ptr<multistream::SecretStore> make_secret_store()
@@ -106,6 +128,7 @@ struct Composition {
 	QObject dispatch_target;
 	std::unique_ptr<multistream::DockController> controller;
 	std::unique_ptr<multistream::VerticalController> vertical_controller;
+	std::unique_ptr<multistream::UpdateService> updates;
 #if defined(MULTI_STREAM_E2E_SECRETS)
 	std::unique_ptr<multistream::E2eCommands> e2e_commands;
 #endif
@@ -235,6 +258,9 @@ void activate_features()
 		module_config_path("e2e-commands.txt"), composition->engine, composition->vertical, vertical_dock, dock,
 		composition->vertical_controller);
 #endif
+
+	composition->updates = make_update_service(true);
+	composition->updates->start(kUpdateCheckDelayMs);
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 }
