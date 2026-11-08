@@ -36,8 +36,10 @@ Out: delta updates, code signing of updates, prerelease channel, Program Files e
 - [x] T1 Core (pure, tested): semver compare, GitHub latest-release JSON parse, platform
   asset selection, digest parse, update decision. Route: delegated (writer, multi-file).
   Evidence: `a567832`; RED 6/11 failing on stubs, GREEN 11/11 (`update_check_test`).
-- [ ] T2 Adapter: Qt update service — check, download, verify SHA-256, stage into the OBS
+- [x] T2 Adapter: Qt update service — check, download, verify SHA-256, stage into the OBS
   config dir; writability check of the install location. Route: delegated.
+  Evidence: `6e3d339`; core `staging_test` RED 6/6 on stubs, GREEN 6/6; ctest 36/36; macOS build OK.
+  Transport is libcurl (as `src/oauth/https_client`), not QNetworkAccessManager.
 - [ ] T3 Installer: install-on-exit via detached helper (waits for OBS PID, backs up,
   extracts, replaces, rolls back) for macOS/Linux (sh) and Windows (PowerShell); core
   plan/script generation tested. Route: delegated.
@@ -69,3 +71,5 @@ before the first commit past the budget.
 - L2 (decision): install-on-exit chosen over notify-only options.
 - L3: RDD off (global) — ordinary checks only.
 - L4: T1 done (`a567832`): `src/update/update_check.*` + `tests/update/update_check_test.cpp`.
+- L5: T2 done (`6e3d339`): `src/update/staging.*` (manifest, install root), `https_download.*`,
+  `update_service.*`; staging in `plugin_config/obs-multi-stream/update/`.
