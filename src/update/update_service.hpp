@@ -52,6 +52,11 @@ public:
 	void set_enabled(bool enabled);
 	void retry();
 
+	// Called once as OBS closes: writes the installer for a verified staged package and
+	// launches it detached, so it runs after OBS exits. Returns at once; false when nothing
+	// was launched (updates off, nothing staged, or the launch failed).
+	bool launch_staged_install();
+
 	bool enabled() const { return enabled_; }
 	const UpdateState &state() const { return state_; }
 	const UpdateServiceConfig &config() const { return config_; }

@@ -3,12 +3,20 @@
 #include "oauth/https_client.hpp"
 #include "persistence/atomic_file.hpp"
 #include "update/https_download.hpp"
+#include "update/install_plan.hpp"
 
 #include <plugin-support.h>
 #include <obs-module.h>
 
+#include <QCoreApplication>
 #include <QMetaObject>
+#include <QProcess>
 #include <QTimer>
+#include <QtGlobal>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include <fstream>
 #include <system_error>
@@ -81,6 +89,81 @@ std::optional<StagedUpdate> read_manifest(const fs::path &staging_dir)
 		return std::nullopt;
 	}
 	return decode_staged_update(text);
+}
+
+// The installer's outcome from the last close. A success is logged and forgotten; a failure
+// is kept, so that the same version is not downloaded and attempted again on every start.
+std::optional<InstallResult> take_install_result(const fs::path &result_file)
+{
+	std::string text;
+	if (!read_whole_file(result_file, text)) {
+		return std::nullopt;
+	}
+	const auto result = parse_install_result(text);
+	if (!result) {
+		remove_all_quietly(result_file);
+		return std::nullopt;
+	}
+	if (result->ok) {
+		obs_log(LOG_INFO, "update %s was installed when OBS last closed", result->version.c_str());
+		remove_all_quietly(result_file);
+	} else {
+		obs_log(LOG_WARNING, "installing update %s failed when OBS last closed: %s", result->version.c_str(),
+			result->detail.c_str());
+	}
+	return result;
+}
+
+QString to_qstring(const fs::path &path)
+{
+#if defined(_WIN32)
+	return QString::fromStdWString(path.wstring());
+#else
+	return QString::fromStdString(to_utf8(path));
+#endif
+}
+
+bool write_script(const fs::path &path, const std::string &script, bool with_bom)
+{
+	std::ofstream file(path, std::ios::binary | std::ios::trunc);
+	if (with_bom) {
+		// Windows PowerShell 5.1 reads a BOM-less script in the system code page.
+		file << "\xEF\xBB\xBF";
+	}
+	file << script;
+	file.close();
+	return static_cast<bool>(file);
+}
+
+bool start_detached(const fs::path &script, UpdatePlatform platform)
+{
+	QProcess process;
+	process.setStandardInputFile(QProcess::nullDevice());
+	process.setStandardOutputFile(QProcess::nullDevice());
+	process.setStandardErrorFile(QProcess::nullDevice());
+	if (platform == UpdatePlatform::WindowsX64) {
+		process.setProgram(QStringLiteral("powershell.exe"));
+		process.setArguments({QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
+				      QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+				      QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"), QStringLiteral("-File"),
+				      to_qstring(script)});
+#if defined(_WIN32)
+		// No console window flashes up while OBS closes.
+		process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *arguments) {
+			arguments->flags &= ~static_cast<DWORD>(CREATE_NEW_CONSOLE);
+			arguments->flags |= CREATE_NO_WINDOW;
+		});
+#endif
+	} else {
+		process.setProgram(QStringLiteral("/bin/sh"));
+		process.setArguments({to_qstring(script)});
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0) && !defined(_WIN32)
+		// Its own session, so the terminal or process group OBS leaves behind cannot stop it.
+		process.setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession |
+						 QProcess::UnixProcessFlag::CloseFileDescriptors);
+#endif
+	}
+	return process.startDetached();
 }
 
 } // namespace
@@ -194,6 +277,7 @@ UpdateService::Outcome UpdateService::check_and_stage(const UpdateServiceConfig 
 						      const std::function<void(const std::string &)> &on_download)
 {
 	Outcome outcome;
+	const auto last_install = take_install_result(config.result_file);
 	const auto current = parse_semver(config.current_version);
 	const bool installable = config.platform && config.install_root && can_replace(*config.install_root);
 
@@ -255,6 +339,12 @@ UpdateService::Outcome UpdateService::check_and_stage(const UpdateServiceConfig 
 	const UpdateState manual{UpdateStatus::Manual, decision.version, release->html_url};
 	if (decision.verdict == UpdateVerdict::NoPackage || !config.platform) {
 		obs_log(LOG_INFO, "update %s has no package for this platform", decision.version.c_str());
+		outcome.state = manual;
+		return outcome;
+	}
+	if (last_install && !last_install->ok && last_install->version == decision.version) {
+		obs_log(LOG_INFO, "update %s failed to install before: offering the manual download",
+			decision.version.c_str());
 		outcome.state = manual;
 		return outcome;
 	}
@@ -321,6 +411,38 @@ UpdateService::Outcome UpdateService::check_and_stage(const UpdateServiceConfig 
 	outcome.state = {UpdateStatus::Ready, decision.version, {}};
 	outcome.ready = ReadyUpdate{staged, archive};
 	return outcome;
+}
+
+bool UpdateService::launch_staged_install()
+{
+	if (!enabled_ || !ready_ || !config_.install_root || !config_.platform) {
+		return false;
+	}
+	InstallPlan plan;
+	plan.platform = *config_.platform;
+	plan.obs_pid = QCoreApplication::applicationPid();
+	plan.version = ready_->staged.version;
+	plan.install_root = to_utf8(*config_.install_root);
+	plan.archive = to_utf8(ready_->archive);
+	plan.staging_dir = to_utf8(config_.staging_dir);
+	plan.result_file = to_utf8(config_.result_file);
+	const auto script = render_install_script(plan);
+	if (!script) {
+		obs_log(LOG_WARNING, "update %s not installed: unsafe install paths", plan.version.c_str());
+		return false;
+	}
+	const fs::path script_path = config_.staging_dir / std::string(install_script_name(plan.platform));
+	if (!write_script(script_path, *script, plan.platform == UpdatePlatform::WindowsX64)) {
+		obs_log(LOG_WARNING, "update %s not installed: cannot write the installer", plan.version.c_str());
+		return false;
+	}
+	if (!start_detached(script_path, plan.platform)) {
+		obs_log(LOG_WARNING, "update %s not installed: cannot start the installer", plan.version.c_str());
+		return false;
+	}
+	obs_log(LOG_INFO, "installing update %s after OBS exits", plan.version.c_str());
+	ready_.reset();
+	return true;
 }
 
 } // namespace multistream

@@ -202,6 +202,14 @@ void on_frontend_event(obs_frontend_event event, void *)
 		composition->vertical.detach();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
+		// The staged update installs from here rather than from obs_module_unload: Qt and
+		// the main loop still exist, so QProcess can launch the installer, and OBS is
+		// certain to be closing. The installer only starts work once this process is gone,
+		// and launching it returns at once, so the close is not delayed. An OBS crash sends
+		// no EXIT; the package then stays staged for the next close.
+		if (composition->updates) {
+			composition->updates->launch_staged_install();
+		}
 		obs_frontend_remove_event_callback(on_frontend_event, nullptr);
 		tear_down();
 		break;
