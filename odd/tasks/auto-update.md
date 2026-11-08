@@ -87,3 +87,6 @@ before the first commit past the budget.
 
 T5 README section (inline). Manual checks pending: run OBS with an older version string to see
 the banner, and a real install-on-exit on macOS, Windows and Linux.
+- L8: T5 README + version 0.3.0 (`2a6a501`). Delivery decision (user): "todo a main y release" — fast-forward to main, no PRs.
+- L9: Windows CI failed with C2375 `blogva` redefinition: `update_service.cpp` included `plugin-support.h` before `obs-module.h`. Fixed in `f65e9da`; CI green on Windows and Linux, macOS build OK, ctest 38/38.
+- L10: Released v0.3.0 (tag on `f65e9da`) with macOS arm64, Windows x64 and Linux x86_64 packages; GitHub publishes `sha256:` digests for all three, so the updater verifies by hash.
