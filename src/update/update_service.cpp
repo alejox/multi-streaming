@@ -5,8 +5,8 @@
 #include "update/https_download.hpp"
 #include "update/install_plan.hpp"
 
-#include <plugin-support.h>
 #include <obs-module.h>
+#include <plugin-support.h>
 
 #include <QCoreApplication>
 #include <QMetaObject>
