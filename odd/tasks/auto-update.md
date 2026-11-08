@@ -40,9 +40,12 @@ Out: delta updates, code signing of updates, prerelease channel, Program Files e
   config dir; writability check of the install location. Route: delegated.
   Evidence: `6e3d339`; core `staging_test` RED 6/6 on stubs, GREEN 6/6; ctest 36/36; macOS build OK.
   Transport is libcurl (as `src/oauth/https_client`), not QNetworkAccessManager.
-- [ ] T3 Installer: install-on-exit via detached helper (waits for OBS PID, backs up,
+- [x] T3 Installer: install-on-exit via detached helper (waits for OBS PID, backs up,
   extracts, replaces, rolls back) for macOS/Linux (sh) and Windows (PowerShell); core
   plan/script generation tested. Route: delegated.
+  Evidence: `a11158c`; `install_plan_test` RED 11/11 on stubs, GREEN 11/11 (runs the real sh
+  script: install, broken archive, bad layout, injected copy failure → rollback); ctest 37/37;
+  macOS build OK. PowerShell script only string-tested (no Windows runner here).
 - [ ] T4 Dock: update banner (available / downloading / ready-on-close / failed / manual
   download link), "Install updates automatically" toggle persisted, locale strings.
   Route: delegated.
@@ -73,3 +76,5 @@ before the first commit past the budget.
 - L4: T1 done (`a567832`): `src/update/update_check.*` + `tests/update/update_check_test.cpp`.
 - L5: T2 done (`6e3d339`): `src/update/staging.*` (manifest, install root), `https_download.*`,
   `update_service.*`; staging in `plugin_config/obs-multi-stream/update/`.
+- L6: T3 done (`a11158c`): launch at frontend EXIT (Qt alive, close not delayed), not
+  obs_module_unload. Outcome in `update-result.txt`; a failed version falls back to manual.
