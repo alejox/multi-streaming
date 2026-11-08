@@ -46,9 +46,11 @@ Out: delta updates, code signing of updates, prerelease channel, Program Files e
   Evidence: `a11158c`; `install_plan_test` RED 11/11 on stubs, GREEN 11/11 (runs the real sh
   script: install, broken archive, bad layout, injected copy failure → rollback); ctest 37/37;
   macOS build OK. PowerShell script only string-tested (no Windows runner here).
-- [ ] T4 Dock: update banner (available / downloading / ready-on-close / failed / manual
+- [x] T4 Dock: update banner (available / downloading / ready-on-close / failed / manual
   download link), "Install updates automatically" toggle persisted, locale strings.
   Route: delegated.
+  Evidence: `14fcd01` (+ `44741a5` style); `update_settings_test` RED 4/5 on stubs, GREEN 5/5;
+  ctest 38/38; macOS build OK. UI not exercised in a running OBS.
 - [ ] T5 Docs: README section on auto-update. Route: inline.
 
 ## Acceptance criteria
@@ -78,3 +80,10 @@ before the first commit past the budget.
   `update_service.*`; staging in `plugin_config/obs-multi-stream/update/`.
 - L6: T3 done (`a11158c`): launch at frontend EXIT (Qt alive, close not delayed), not
   obs_module_unload. Outcome in `update-result.txt`; a failed version falls back to manual.
+- L7: T4 done (`14fcd01`): `src/dock/update_controller.*`, dock notice + settings-menu toggle,
+  `update.json` via `src/persistence/update_settings_file.*`, en-US + es-ES strings.
+
+## Next step
+
+T5 README section (inline). Manual checks pending: run OBS with an older version string to see
+the banner, and a real install-on-exit on macOS, Windows and Linux.
