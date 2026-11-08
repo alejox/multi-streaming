@@ -51,7 +51,7 @@ Out: delta updates, code signing of updates, prerelease channel, Program Files e
   Route: delegated.
   Evidence: `14fcd01` (+ `44741a5` style); `update_settings_test` RED 4/5 on stubs, GREEN 5/5;
   ctest 38/38; macOS build OK. UI not exercised in a running OBS.
-- [ ] T5 Docs: README section on auto-update. Route: inline.
+- [x] T5 Docs: README section on auto-update. Route: inline (one file, mechanical).
 
 ## Acceptance criteria
 

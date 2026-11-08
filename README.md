@@ -2,7 +2,7 @@
 
 Stream one OBS session to many RTMP/RTMPS destinations at once, each fed by the main mix or a dedicated vertical canvas. Stream keys live in the system's secret store (macOS Keychain, Windows Credential Manager, or Linux Secret Service), not in config files.
 
-> **Status: v0.2.0 released.** Windows, Linux and macOS packages are published on the [releases page](https://github.com/alejox/multi-streaming/releases). Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet, and neither the Windows nor the Linux package has been run inside OBS. See [Verification status](#verification-status).
+> **Status: v0.3.0 released.** Windows, Linux and macOS packages are published on the [releases page](https://github.com/alejox/multi-streaming/releases). Streaming is proven against local RTMP sinks on macOS arm64 with OBS 33.0.1. The dock and vertical canvas UI have not been checked by hand yet, and neither the Windows nor the Linux package has been run inside OBS. See [Verification status](#verification-status).
 
 ## Quick path
 
@@ -61,6 +61,8 @@ Download the latest packages from the [releases page](https://github.com/alejox/
 - **Dedicated audio is AAC at a fixed 160 kbps.**
 - **Audio always comes from the main mix.** A source added only to the vertical canvas is silent on every destination. This keeps vertical-only audio out of the main stream.
 - **Vertical resolution cannot change** while a vertical destination is live.
+- **Updates install when OBS closes.** About 8 s after OBS starts, the plugin checks the latest GitHub release. If it is newer, the package for your platform is downloaded in the background and verified with SHA-256. The dock then shows that the update is ready. When OBS closes, a separate script waits for OBS to exit, moves the current version aside, installs the new one, and puts the old one back if anything fails. Turn this off with **Install updates automatically** in the dock settings menu.
+- **Some installs only get a download link.** This happens when the plugin is not in a per-user `obs-studio/plugins/<name>` folder, or that folder cannot be written (for example a system-wide or Program Files install). It also happens when a version failed to install. The dock then shows a **Download** link to the release page.
 
 ## Known limits
 
