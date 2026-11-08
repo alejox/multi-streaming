@@ -43,6 +43,7 @@ target_sources(
     src/dock/destinations_dock.cpp
     src/dock/dock_controller.cpp
     src/dock/icons.cpp
+    src/dock/update_controller.cpp
     src/dock/vertical_controller.cpp
     src/dock/vertical_dock.cpp
     src/dock/vertical_preview.cpp

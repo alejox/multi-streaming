@@ -20,10 +20,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "destinations/runtime_requirements.hpp"
 #include "dock/destinations_dock.hpp"
+#include "dock/update_controller.hpp"
 #include "dock/dock_controller.hpp"
 #include "dock/vertical_controller.hpp"
 #include "dock/vertical_dock.hpp"
 #include "persistence/file_config_repository.hpp"
+#include "persistence/update_settings_file.hpp"
 #include "secrets/platform_secret_store.hpp"
 #include "streaming/localized_text.hpp"
 #include "streaming/streaming_engine.hpp"
@@ -129,6 +131,8 @@ struct Composition {
 	std::unique_ptr<multistream::DockController> controller;
 	std::unique_ptr<multistream::VerticalController> vertical_controller;
 	std::unique_ptr<multistream::UpdateService> updates;
+	// Declared after the service, so it is released first.
+	std::unique_ptr<multistream::UpdateController> update_controller;
 #if defined(MULTI_STREAM_E2E_SECRETS)
 	std::unique_ptr<multistream::E2eCommands> e2e_commands;
 #endif
@@ -267,7 +271,12 @@ void activate_features()
 		composition->vertical_controller);
 #endif
 
-	composition->updates = make_update_service(true);
+	const std::filesystem::path update_settings_path = std::filesystem::u8path(module_config_path("update.json"));
+	composition->updates = make_update_service(multistream::load_update_settings(update_settings_path).auto_install);
+	if (dock) {
+		composition->update_controller =
+			std::make_unique<multistream::UpdateController>(*composition->updates, dock, update_settings_path);
+	}
 	composition->updates->start(kUpdateCheckDelayMs);
 
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);

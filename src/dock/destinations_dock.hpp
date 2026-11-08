@@ -46,6 +46,19 @@ struct DestinationRowStatus {
 	bool can_edit = false;
 };
 
+// The update notice at the top of the dock.
+enum class UpdateBannerKind {
+	Hidden,
+	// Quiet: muted text, no action.
+	Downloading,
+	// Installs when OBS closes.
+	Ready,
+	// Newer version that must be downloaded by hand: offers the release page.
+	Available,
+	// Offers a retry.
+	Failed,
+};
+
 struct DestinationRowView {
 	QString id;
 	QString name;
@@ -71,6 +84,9 @@ public:
 	void set_color_icons(bool on);
 	// Whether Start all and Stop all have anything to act on.
 	void set_bulk_actions(bool can_start_all, bool can_stop_all);
+	// `version` is shown as "v<version>"; unused for Hidden and Failed.
+	void set_update_banner(UpdateBannerKind kind, const QString &version);
+	void set_auto_update(bool on);
 
 signals:
 	void add_requested();
@@ -86,6 +102,9 @@ signals:
 	// (the row count means the end).
 	void move_to_requested(const QString &id, int insert_position);
 	void color_icons_toggled(bool on);
+	void auto_update_toggled(bool on);
+	void update_download_requested();
+	void update_retry_requested();
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -128,6 +147,11 @@ private:
 	QFrame *problem_frame_ = nullptr;
 	QLabel *problem_ = nullptr;
 	QToolButton *dismiss_problem_ = nullptr;
+	QFrame *update_frame_ = nullptr;
+	QLabel *update_text_ = nullptr;
+	QToolButton *update_action_ = nullptr;
+	QToolButton *dismiss_update_ = nullptr;
+	UpdateBannerKind update_kind_ = UpdateBannerKind::Hidden;
 	QWidget *empty_ = nullptr;
 	QLabel *empty_icon_ = nullptr;
 	QLabel *empty_text_ = nullptr;
@@ -140,6 +164,7 @@ private:
 	QToolButton *settings_ = nullptr;
 	QMenu *settings_menu_ = nullptr;
 	QAction *color_icons_action_ = nullptr;
+	QAction *auto_update_action_ = nullptr;
 	bool color_icons_on_ = false;
 	std::map<QString, RowWidgets> rows_;
 	int row_count_ = 0;

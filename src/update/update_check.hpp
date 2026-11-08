@@ -13,6 +13,8 @@ namespace multistream {
 
 inline constexpr std::string_view kLatestReleaseUrl =
 	"https://api.github.com/repos/alejox/multi-streaming/releases/latest";
+// Where a manual download goes when the release did not report its own page.
+inline constexpr std::string_view kReleasesPageUrl = "https://github.com/alejox/multi-streaming/releases/latest";
 inline constexpr std::string_view kPackagePrefix = "obs-multi-stream-";
 
 struct SemVer {

@@ -145,6 +145,36 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	problem_frame_->hide();
 	layout->addWidget(problem_frame_);
 
+	// The update notice: one line of text, an optional action, and a close button.
+	update_frame_ = new QFrame(this);
+	update_frame_->setProperty("class", "frame-notice");
+	update_text_ = new QLabel(update_frame_);
+	update_text_->setWordWrap(true);
+	update_text_->setTextFormat(Qt::PlainText);
+	update_action_ = new QToolButton(update_frame_);
+	update_action_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	connect(update_action_, &QToolButton::clicked, this, [this] {
+		if (update_kind_ == UpdateBannerKind::Available) {
+			emit update_download_requested();
+		} else if (update_kind_ == UpdateBannerKind::Failed) {
+			emit update_retry_requested();
+		}
+	});
+	dismiss_update_ = new QToolButton(update_frame_);
+	dismiss_update_->setAutoRaise(true);
+	dismiss_update_->setProperty("class", "icon-close");
+	dismiss_update_->setToolTip(obs_module_text("Dock.Dismiss"));
+	dismiss_update_->setAccessibleName(obs_module_text("Dock.Dismiss"));
+	connect(dismiss_update_, &QToolButton::clicked, update_frame_, &QWidget::hide);
+	auto *update_layout = new QHBoxLayout(update_frame_);
+	update_layout->setContentsMargins(0, 0, 0, 0);
+	update_layout->setSpacing(4);
+	update_layout->addWidget(update_text_, 1);
+	update_layout->addWidget(update_action_, 0, Qt::AlignVCenter);
+	update_layout->addWidget(dismiss_update_, 0, Qt::AlignTop);
+	update_frame_->hide();
+	layout->addWidget(update_frame_);
+
 	// Shown instead of the list while there are no destinations.
 	empty_ = new QWidget(this);
 	empty_icon_ = new QLabel(empty_);
@@ -209,6 +239,10 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 		apply_row_icons_all();
 		emit color_icons_toggled(on);
 	});
+	auto_update_action_ = settings_menu_->addAction(obs_module_text("Dock.AutoUpdate"));
+	auto_update_action_->setCheckable(true);
+	auto_update_action_->setToolTip(obs_module_text("Dock.AutoUpdateHint"));
+	connect(auto_update_action_, &QAction::toggled, this, &DestinationsDock::auto_update_toggled);
 	settings_ = new QToolButton(this);
 	settings_->setProperty("class", "btn-tool icon-gear");
 	settings_->setToolTip(obs_module_text("Dock.Settings"));
@@ -264,6 +298,52 @@ void DestinationsDock::set_bulk_actions(bool can_start_all, bool can_stop_all)
 {
 	start_all_->setEnabled(can_start_all);
 	stop_all_->setEnabled(can_stop_all);
+}
+
+void DestinationsDock::set_update_banner(UpdateBannerKind kind, const QString &version)
+{
+	update_kind_ = kind;
+	const QString tagged = QStringLiteral("v") + version;
+	QString text;
+	QString action;
+	bool muted = false;
+	switch (kind) {
+	case UpdateBannerKind::Hidden:
+		update_frame_->hide();
+		return;
+	case UpdateBannerKind::Downloading:
+		text = QString::fromUtf8(obs_module_text("Update.Downloading")).arg(tagged);
+		muted = true;
+		break;
+	case UpdateBannerKind::Ready:
+		text = QString::fromUtf8(obs_module_text("Update.Ready")).arg(tagged);
+		break;
+	case UpdateBannerKind::Available:
+		text = QString::fromUtf8(obs_module_text("Update.Available")).arg(tagged);
+		action = QString::fromUtf8(obs_module_text("Update.Download"));
+		break;
+	case UpdateBannerKind::Failed:
+		text = QString::fromUtf8(obs_module_text("Update.Failed"));
+		action = QString::fromUtf8(obs_module_text("Update.Retry"));
+		muted = true;
+		break;
+	}
+	update_text_->setText(text);
+	update_text_->setProperty("class", muted ? "text-small text-muted" : "text-small");
+	// The class is read by the theme's stylesheet, which needs a re-polish to apply it.
+	update_text_->style()->unpolish(update_text_);
+	update_text_->style()->polish(update_text_);
+	update_action_->setText(action);
+	update_action_->setAccessibleName(action);
+	update_action_->setVisible(!action.isEmpty());
+	dismiss_update_->setVisible(kind != UpdateBannerKind::Downloading);
+	update_frame_->show();
+}
+
+void DestinationsDock::set_auto_update(bool on)
+{
+	const QSignalBlocker blocker(auto_update_action_);
+	auto_update_action_->setChecked(on);
 }
 
 void DestinationsDock::show_problem(const QString &problem)
@@ -448,6 +528,7 @@ void DestinationsDock::apply_theme_icons()
 {
 	apply_class_icon(settings_, themed_icon("icons/ui/settings.svg", palette()));
 	apply_class_icon(dismiss_problem_, style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+	apply_class_icon(dismiss_update_, style()->standardIcon(QStyle::SP_TitleBarCloseButton));
 	const qreal ratio = devicePixelRatioF();
 	const QColor muted =
 		themed_text_color(empty_text_, palette(), palette().color(QPalette::Disabled, QPalette::WindowText));

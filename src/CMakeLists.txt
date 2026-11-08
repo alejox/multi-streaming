@@ -42,6 +42,7 @@ add_library(
   update/install_plan.cpp
   update/staging.cpp
   update/update_check.cpp
+  update/update_settings.cpp
   vertical_canvas/preview_geometry.cpp
   vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp
@@ -57,6 +58,7 @@ add_library(
   STATIC
   persistence/atomic_file.cpp
   persistence/file_config_repository.cpp
+  persistence/update_settings_file.cpp
   persistence/vertical_settings_file.cpp
   secrets/platform_secret_store.cpp
   secrets/secret_worker.cpp
