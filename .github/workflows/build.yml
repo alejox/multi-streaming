@@ -16,15 +16,16 @@ permissions:
 
 jobs:
   macos-arm64:
-    runs-on: macos-15
+    # OBS 33 builds against the macOS 26.5 SDK (Xcode 26.5).
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
-      # OBS 33 needs Xcode 16 or later; the image default may be older.
       - name: Select Xcode
         run: |
-          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          ls -d /Applications/Xcode*.app
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           if [ -n "$xcode" ]; then sudo xcode-select --switch "$xcode/Contents/Developer"; fi
           xcodebuild -version
 
