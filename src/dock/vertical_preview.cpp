@@ -458,6 +458,12 @@ std::vector<ItemBox> VerticalPreview::other_boxes() const
 	return others;
 }
 
+void VerticalPreview::set_safe_zones(bool shown)
+{
+	safe_zones_ = shown;
+	refresh_overlay();
+}
+
 void VerticalPreview::refresh_overlay()
 {
 	if (!target_) {
@@ -467,6 +473,9 @@ void VerticalPreview::refresh_overlay()
 	PreviewOverlay overlay;
 	overlay.pixel_ratio = devicePixelRatioF();
 	overlay.guides = guides_;
+	if (safe_zones_ && canvas_ != nullptr && canvas_->available()) {
+		overlay.safe_zones = app_safe_zones(canvas_->canvas_size());
+	}
 
 	if (const auto id = interaction_.selection(); id && canvas_ != nullptr) {
 		const std::optional<PreviewItem> item = canvas_->preview_item(*id);

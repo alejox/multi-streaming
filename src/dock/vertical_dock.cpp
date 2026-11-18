@@ -2,10 +2,15 @@
 
 #include "dock/icons.hpp"
 #include "dock/vertical_preview.hpp"
+#include "vertical_canvas/auto_layout.hpp"
 
 #include <obs-module.h>
 
 #include <QAction>
+#include <QComboBox>
+#include <QMenu>
+#include <QSlider>
+#include <QTimer>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -17,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace multistream {
 namespace {
@@ -66,6 +72,10 @@ VerticalDock::VerticalDock(QWidget *parent)
 	  empty_hint_(new QLabel(text("Vertical.EmptyHint"))),
 	  resolution_(new QLabel()),
 	  audio_note_(new QLabel()),
+	  link_bar_(new QWidget()),
+	  link_label_(new QLabel()),
+	  link_layout_(new QComboBox()),
+	  link_focus_(new QSlider(Qt::Horizontal)),
 	  lists_(new QSplitter(Qt::Horizontal)),
 	  scenes_(new SceneList()),
 	  items_(new QListWidget())
@@ -103,8 +113,29 @@ VerticalDock::VerticalDock(QWidget *parent)
 	lists_->setStretchFactor(1, 2);
 	lists_->setChildrenCollapsible(false);
 
+	// Import a main scene as a linked vertical scene.
+	auto *import = new QToolButton();
+	import->setText(text("Vertical.Import"));
+	import->setToolTip(text("Vertical.ImportHint"));
+	import->setAccessibleName(text("Vertical.Import"));
+	import->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	connect(import, &QToolButton::clicked, this,
+		[this, import] { emit import_menu_requested(import->mapToGlobal(QPoint(0, import->height()))); });
+
+	auto *safe_zones = new QToolButton();
+	safe_zones->setText(text("Vertical.SafeZones"));
+	safe_zones->setToolTip(text("Vertical.SafeZonesHint"));
+	safe_zones->setAccessibleName(text("Vertical.SafeZones"));
+	safe_zones->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	safe_zones->setCheckable(true);
+	safe_zones->setChecked(true);
+	safe_zones->setAutoRaise(true);
+	connect(safe_zones, &QToolButton::toggled, this, &VerticalDock::safe_zones_toggled);
+
 	auto *status_row = new QHBoxLayout();
 	status_row->setContentsMargins(0, 0, 0, 0);
+	status_row->addWidget(import);
+	status_row->addWidget(safe_zones);
 	status_row->addStretch();
 	status_row->addWidget(resolution_);
 	status_row->addWidget(settings);
@@ -112,10 +143,70 @@ VerticalDock::VerticalDock(QWidget *parent)
 	auto *controls = new QVBoxLayout(controls_);
 	controls->setContentsMargins(0, 0, 0, 0);
 	controls->addLayout(status_row);
+	controls->addWidget(link_bar_);
 	controls->addWidget(empty_hint_);
 	controls->addWidget(message_);
 	controls->addWidget(lists_, 1);
 	controls->addWidget(audio_note_);
+
+	// The link to the main scene: template, focus, and what to do with hand-made changes.
+	link_label_->setWordWrap(true);
+	link_label_->setTextFormat(Qt::PlainText);
+	link_label_->setProperty("class", "text-small");
+	for (const TwinLayout layout : kAllTwinLayouts) {
+		const std::string key = "Vertical.Layout." + std::string(twin_layout_id(layout));
+		link_layout_->addItem(text(key.c_str()));
+	}
+	link_layout_->setToolTip(text("Vertical.LayoutHint"));
+	link_focus_->setRange(0, 100);
+	link_focus_->setToolTip(text("Vertical.FocusHint"));
+	link_focus_->setAccessibleName(text("Vertical.Focus"));
+	auto *relayout = new QToolButton();
+	relayout->setText(text("Vertical.Relayout"));
+	relayout->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	relayout->setPopupMode(QToolButton::InstantPopup);
+	auto *relayout_menu = new QMenu(relayout);
+	relayout_menu->addAction(text("Vertical.RelayoutAuto"), this, [this] { emit relayout_requested(false); });
+	relayout_menu->addAction(text("Vertical.RelayoutAll"), this, [this] { emit relayout_requested(true); });
+	relayout_menu->addSeparator();
+	relayout_menu->addAction(text("Vertical.Unlink"), this, [this] { emit unlink_requested(); });
+	relayout->setMenu(relayout_menu);
+
+	auto *focus_label = new QLabel(text("Vertical.Focus"));
+	focus_label->setProperty("class", "text-small text-muted");
+	auto *link_top = new QHBoxLayout();
+	link_top->setContentsMargins(0, 0, 0, 0);
+	link_top->addWidget(link_label_, 1);
+	link_top->addWidget(relayout);
+	auto *link_controls = new QHBoxLayout();
+	link_controls->setContentsMargins(0, 0, 0, 0);
+	link_controls->addWidget(link_layout_);
+	link_controls->addSpacing(8);
+	link_controls->addWidget(focus_label);
+	link_controls->addWidget(link_focus_, 1);
+	auto *link_layout = new QVBoxLayout(link_bar_);
+	link_layout->setContentsMargins(0, 4, 0, 4);
+	link_layout->setSpacing(4);
+	link_layout->addLayout(link_top);
+	link_layout->addLayout(link_controls);
+	link_bar_->hide();
+
+	// The slider sends a burst while dragged: one layout once it rests.
+	auto *focus_settle = new QTimer(this);
+	focus_settle->setSingleShot(true);
+	focus_settle->setInterval(90);
+	const auto send_layout = [this] {
+		if (!updating_) {
+			emit link_layout_changed(link_layout_->currentIndex(), link_focus_->value() / 100.0);
+		}
+	};
+	connect(focus_settle, &QTimer::timeout, this, send_layout);
+	connect(link_focus_, &QSlider::valueChanged, this, [this, focus_settle] {
+		if (!updating_) {
+			focus_settle->start();
+		}
+	});
+	connect(link_layout_, &QComboBox::currentIndexChanged, this, send_layout);
 
 	auto *outer = new QSplitter(Qt::Vertical);
 	outer->addWidget(preview_);
@@ -276,8 +367,8 @@ void VerticalDock::update_row(QWidget *row, const VerticalItemView &view)
 	row->findChild<QLabel *>(kIconLabelName)
 		->setPixmap(themed_pixmap(view.icon_file.c_str(), palette(), kRowIconSize, devicePixelRatioF()));
 	auto *name = row->findChild<QLabel *>(kNameLabelName);
-	name->setText(view.name);
-	name->setToolTip(view.name);
+	name->setText(view.manual ? view.name + QStringLiteral("  \u270E") : view.name);
+	name->setToolTip(view.manual ? view.name + QStringLiteral("\n") + text("Vertical.ManualHint") : view.name);
 	name->setEnabled(view.visible);
 	set_toggle_look(row->findChild<QToolButton *>(kVisibleButtonName), view.visible, kVisibleIcon, kHiddenIcon,
 			"Vertical.HideSource", "Vertical.ShowSource");
@@ -422,6 +513,22 @@ QString VerticalDock::selected_scene() const
 {
 	const QListWidgetItem *item = scenes_->currentItem();
 	return item != nullptr ? item->data(kSceneNameRole).toString() : QString();
+}
+
+void VerticalDock::set_link(const std::optional<VerticalLinkView> &link)
+{
+	link_bar_->setVisible(link.has_value());
+	if (!link) {
+		return;
+	}
+	updating_ = true;
+	link_label_->setText(link->main_name.isEmpty() ? text("Vertical.LinkedMissing")
+						       : text("Vertical.LinkedTo").arg(link->main_name));
+	link_layout_->setCurrentIndex(link->layout);
+	if (!link_focus_->isSliderDown()) {
+		link_focus_->setValue(static_cast<int>(std::lround(link->focus * 100.0)));
+	}
+	updating_ = false;
 }
 
 } // namespace multistream

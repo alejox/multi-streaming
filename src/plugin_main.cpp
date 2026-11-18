@@ -174,6 +174,13 @@ void on_frontend_event(obs_frontend_event event, void *)
 	case OBS_FRONTEND_EVENT_PROFILE_CHANGED:
 		composition->vertical.refresh_video();
 		break;
+	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+		// A linked vertical scene follows its main scene onto the canvas.
+		composition->vertical.follow_program();
+		break;
+	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
+		composition->vertical.refresh_links();
+		break;
 	case OBS_FRONTEND_EVENT_CANVAS_REMOVED:
 		// OBSStudioAPI::on_event drops this event while saving is disabled, which covers a
 		// collection being unloaded (frontend/OBSStudioAPI.cpp:756-759 at OBS 33.0.1), so

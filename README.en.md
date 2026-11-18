@@ -28,6 +28,10 @@
 | 🌐 | **Multi-destination streaming** | Many RTMP/RTMPS destinations, each with its own start/stop, plus **Start all** and **Stop all** |
 | 🎯 | **Service presets** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram, or a custom server. Links to the stream key page for YouTube, Twitch, Kick and Facebook |
 | 📱 | **Vertical canvas** | A second canvas (default 1080x1920) with its own scenes, sources, preview, and Fit/Fill composition, in its own dock |
+| 🪄 | **Import from horizontal** | Creates the vertical version of a scene with **the same sources**, laid out for you: camera on top, captures reframed, backgrounds full screen, overlays anchored to their corner |
+| 🔗 | **Linked scenes** | The vertical scene follows the horizontal one: it switches with OBS's program, and what you add, remove, move or hide there shows up here. Hand-made adjustments in vertical are kept |
+| 📐 | **Templates and focus** | Camera on top, Full screen or Big camera, plus a focus control for which part of the capture shows |
+| 📲 | **Safe zones** | Shades in the preview where TikTok, Shorts and Reels put their buttons and captions |
 | 🎞️ | **Video source per destination** | Each destination sends the `main` mix or the `vertical` canvas |
 | ⚙️ | **Smart encoders** | Destinations share an encoder when their settings match, and get a dedicated one when they don't |
 | 🔗 | **Sync with OBS streaming** | Optionally start and stop a destination together with the main OBS stream |
@@ -147,7 +151,7 @@ All packages are on the [latest release page](https://github.com/alejox/multi-st
 Your first multistream in three steps:
 
 1. **Add a destination.** Open **Docks > Multi Stream**, click **Add destination**, pick a service, and paste the stream key (or click **Connect with Twitch**).
-2. **Choose the video.** Set **Video source** to `main`, or to `vertical` and arrange that canvas in **Docks > Vertical canvas**.
+2. **Choose the video.** Set **Video source** to `main`, or to `vertical` and arrange that canvas in **Docks > Vertical canvas**. Fastest: **Import from horizontal**, pick your scene, and adjust only what you want.
 3. **Go live.** Press the row's start button or **Start all**. To follow the main stream, turn on **Start and stop with OBS streaming** in the destination.
 
 > [!TIP]
@@ -307,7 +311,7 @@ The manual collection cleanup has been tested once.
 
 | Check | Result |
 |-------|--------|
-| Core tests | ✅ 38 of 38 pass |
+| Core tests | ✅ 39 of 39 pass |
 | Plugin loads and unloads in OBS 33.0.1 (macOS) | ✅ Pass |
 | Main and vertical streaming together | ✅ Pass: 640x360 and 1080x1920 on local RTMP sinks |
 | Retries exhausted, closed port, exit while live | ✅ Pass, repeated runs |
@@ -315,6 +319,7 @@ The manual collection cleanup has been tested once.
 | Update installer script (install, broken archive, bad layout, rollback) | ✅ Pass on macOS (sh); the PowerShell script is string-tested only |
 | Windows and Linux in CI: compile, core tests, package | ✅ Pass |
 | Dock, editor, and vertical canvas UI by hand | ⏳ Not checked |
+| Linked scenes and import from horizontal inside OBS | ⏳ Not checked; the layout math has core tests |
 | Update banner and real install-on-exit | ⏳ Not checked |
 | Metal renderer | ⏳ Not tested; all runs used OpenGL |
 | Real Keychain prompt during start | ⏳ Not tested |
@@ -398,6 +403,12 @@ ctest --test-dir build_tests --output-on-failure
 - Runtime tests use the `MULTI_STREAM_E2E_SECRETS` CMake option in a separate build directory. It reads fake keys from a file and adds a test command hook. It is off by default, the code is excluded at compile time, and installing such a build fails on purpose.
 
 </details>
+
+---
+
+## ☕ Support the project
+
+The plugin is free and will stay free. If it helps you, a coffee-sized contribution on [Ko-fi](https://ko-fi.com/alejoxcode) keeps it free for everyone, including those who can't chip in.
 
 ---
 

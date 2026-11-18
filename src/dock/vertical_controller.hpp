@@ -40,6 +40,7 @@ private:
 	void rename_scene(const QString &name, const QString &new_name);
 	void remove_scene(const QString &name);
 	void edit_resolution();
+	void show_import_menu(const QPoint &global_position);
 
 	VerticalCanvas &canvas_;
 	StreamingEngine &engine_;

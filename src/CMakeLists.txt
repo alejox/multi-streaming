@@ -43,6 +43,7 @@ add_library(
   update/staging.cpp
   update/update_check.cpp
   update/update_settings.cpp
+  vertical_canvas/auto_layout.cpp
   vertical_canvas/preview_geometry.cpp
   vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp

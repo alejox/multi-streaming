@@ -28,6 +28,10 @@
 | 🌐 | **Transmisión a varios destinos** | Muchos destinos RTMP/RTMPS, cada uno con su propio inicio y parada, más **Iniciar todos** y **Detener todos** |
 | 🎯 | **Servicios predefinidos** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram o un servidor personalizado. Enlaces a la página de la clave de transmisión de YouTube, Twitch, Kick y Facebook |
 | 📱 | **Lienzo vertical** | Un segundo lienzo (1080x1920 por defecto) con sus propias escenas, fuentes, vista previa y composición Ajustar/Rellenar, en su propio panel |
+| 🪄 | **Importar desde horizontal** | Crea la versión vertical de una escena con **sus mismas fuentes**, acomodadas solas: cámara arriba, capturas reencuadradas, fondos a pantalla completa y overlays anclados a su esquina |
+| 🔗 | **Escenas vinculadas** | La escena vertical sigue a la horizontal: cambia junto con el programa de OBS, y lo que agregas, quitas, mueves u ocultas allá se refleja aquí. Lo que ajustas a mano en vertical se respeta |
+| 📐 | **Plantillas y enfoque** | Cámara arriba, Pantalla completa o Cámara grande, y un control de enfoque para elegir qué parte de la captura se ve |
+| 📲 | **Zonas seguras** | Sombrea en la vista previa donde TikTok, Shorts y Reels ponen sus botones y el texto |
 | 🎞️ | **Fuente de video por destino** | Cada destino envía la mezcla `main` o el lienzo `vertical` |
 | ⚙️ | **Codificadores inteligentes** | Los destinos comparten codificador cuando su configuración coincide, y usan uno dedicado cuando no |
 | 🔗 | **Sincronización con la transmisión de OBS** | Opcionalmente, un destino inicia y se detiene junto con la transmisión principal de OBS |
@@ -147,7 +151,7 @@ Todos los paquetes están en la [página de la última versión](https://github.
 Tu primera multitransmisión en tres pasos:
 
 1. **Añade un destino.** Abre **Paneles > Multi Stream**, haz clic en **Añadir destino**, elige un servicio y pega la clave de transmisión (o haz clic en **Conectar con Twitch**).
-2. **Elige el video.** Pon **Fuente de video** en `main`, o en `vertical` y organiza ese lienzo en **Paneles > Lienzo vertical**.
+2. **Elige el video.** Pon **Fuente de video** en `main`, o en `vertical` y organiza ese lienzo en **Paneles > Lienzo vertical**. Lo más rápido: **Importar desde horizontal**, elige tu escena y ajusta solo lo que quieras.
 3. **Sal en vivo.** Pulsa el botón de inicio de la fila o **Iniciar todos**. Para seguir la transmisión principal, activa **Iniciar y detener con la transmisión de OBS** en el destino.
 
 > [!TIP]
@@ -307,7 +311,7 @@ La limpieza manual de la colección se ha probado una vez.
 
 | Comprobación | Resultado |
 |--------------|-----------|
-| Pruebas del núcleo | ✅ 38 de 38 pasan |
+| Pruebas del núcleo | ✅ 39 de 39 pasan |
 | El plugin carga y descarga en OBS 33.0.1 (macOS) | ✅ Pasa |
 | Transmisión principal y vertical a la vez | ✅ Pasa: 640x360 y 1080x1920 en receptores RTMP locales |
 | Reintentos agotados, puerto cerrado, salir en vivo | ✅ Pasa, varias ejecuciones |
@@ -315,6 +319,7 @@ La limpieza manual de la colección se ha probado una vez.
 | Script de instalación de actualizaciones (instalación, archivo dañado, estructura incorrecta, reversión) | ✅ Pasa en macOS (sh); el script de PowerShell solo se prueba como texto |
 | Windows y Linux en CI: compilación, pruebas del núcleo, paquete | ✅ Pasa |
 | Interfaz del panel, el editor y el lienzo vertical a mano | ⏳ Sin comprobar |
+| Escenas vinculadas e importar desde horizontal dentro de OBS | ⏳ Sin comprobar; el cálculo del autoajuste tiene pruebas del núcleo |
 | Aviso de actualización e instalación real al cerrar | ⏳ Sin comprobar |
 | Renderizador Metal | ⏳ Sin probar; todas las ejecuciones usaron OpenGL |
 | Solicitud real del Llavero al iniciar | ⏳ Sin probar |
@@ -398,6 +403,12 @@ ctest --test-dir build_tests --output-on-failure
 - Las pruebas de ejecución usan la opción de CMake `MULTI_STREAM_E2E_SECRETS` en un directorio de compilación aparte. Lee claves falsas desde un archivo y añade un gancho de comandos de prueba. Está desactivada por defecto, el código se excluye al compilar e instalar esa compilación falla a propósito.
 
 </details>
+
+---
+
+## ☕ Apoya el proyecto
+
+El plugin es gratis y lo va a seguir siendo. Si te sirve, un aporte del tamaño de un café en [Ko-fi](https://ko-fi.com/alejoxcode) ayuda a mantenerlo gratis para todos, también para quien no puede aportar.
 
 ---
 

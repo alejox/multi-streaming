@@ -34,6 +34,8 @@ public:
 	void set_canvas(VerticalCanvas *canvas);
 
 	std::optional<std::int64_t> selected_item() const { return interaction_.selection(); }
+	// Shades the strips that phone apps cover with their own buttons and captions.
+	void set_safe_zones(bool shown);
 	void set_selected_item(std::optional<std::int64_t> id);
 
 	// Removes the draw callback and destroys the display. Safe to call repeatedly.
@@ -88,6 +90,7 @@ private:
 	// Boxes of the other visible, unlocked items, to snap against.
 	std::vector<ItemBox> other_boxes() const;
 	void refresh_overlay();
+	bool safe_zones_ = true;
 	void lose_selection();
 	void show_cursor(PreviewCursor cursor);
 	void nudge(NudgeDirection direction, bool shift);

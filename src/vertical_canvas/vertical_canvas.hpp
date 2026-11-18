@@ -12,6 +12,7 @@
 
 #include "destinations/vertical_settings.hpp"
 #include "streaming/video_sources.hpp"
+#include "vertical_canvas/auto_layout.hpp"
 #include "vertical_canvas/preview_geometry.hpp"
 #include "vertical_canvas/source_catalog.hpp"
 
@@ -37,6 +38,8 @@ struct PreviewOverlay {
 	std::optional<ItemBox> box;
 	bool handles = false;
 	SnapGuides guides;
+	// Shaded strips that phone apps cover with their own buttons, in canvas pixels.
+	std::vector<Rect> safe_zones;
 	double pixel_ratio = 1.0;
 };
 
@@ -78,6 +81,23 @@ struct VerticalItem {
 	bool locked = false;
 	// Audio-only sources have no place in the picture.
 	bool has_video = true;
+	// Placed by the linked scene's automatic layout, and whether the user moved it since.
+	bool linked = false;
+	bool manual = false;
+};
+
+// A main (horizontal) scene, and the vertical scene linked to it if there is one.
+struct MainSceneChoice {
+	std::string uuid;
+	std::string name;
+	std::optional<std::string> vertical_scene;
+};
+
+// The link of the vertical scene on the canvas to its main scene.
+struct ActiveLink {
+	std::string main_name;
+	TwinLayout layout = TwinLayout::CameraTop;
+	double focus = 0.5;
 };
 
 class VerticalCanvas final : public VideoSources {
@@ -142,6 +162,28 @@ public:
 	bool center_item(std::int64_t id);
 	bool reset_item_transform(std::int64_t id);
 
+	// Linked scenes. A linked vertical scene shows the same sources as its main scene, placed
+	// by the automatic layout, and follows it: items added, removed, shown, hidden or moved
+	// there are mirrored here, except items the user moved here by hand. When the program
+	// scene changes, the canvas switches to its linked vertical scene, if it has one. The
+	// link lives in the scene's private settings, so it is saved with the collection.
+	std::vector<MainSceneChoice> main_scene_choices() const;
+	// Creates the linked vertical scene, fills it, and shows it. Returns its name.
+	std::optional<std::string> import_main_scene(const std::string &main_uuid, TwinLayout layout);
+	std::optional<ActiveLink> active_link() const;
+	bool set_active_link_layout(TwinLayout layout, double focus);
+	// Places the automatic items again; with include_manual, also the ones moved by hand.
+	bool relayout_active(bool include_manual);
+	// The scene and its items stay as they are, they just stop following the main scene.
+	bool unlink_active();
+	bool reset_item_to_auto(std::int64_t id);
+	bool item_visibility_linked(std::int64_t id) const;
+	bool set_item_visibility_linked(std::int64_t id, bool linked);
+	// After the program scene changed.
+	void follow_program();
+	// After the main scene list changed: watches the main scenes that have a linked scene.
+	void refresh_links();
+
 	// Asks OBS to save the collection, which holds the scenes and their items.
 	void save_collection() const;
 
@@ -182,6 +224,23 @@ private:
 	OBSSceneItem find_item(std::int64_t id) const;
 	void place_item(obs_sceneitem_t *item, obs_bounds_type bounds) const;
 	void replace_bounds_of_all_items();
+
+	// Linked scenes, see auto_layout.hpp.
+	obs_scene_t *linked_scene_for(const std::string &main_uuid) const;
+	obs_scene_t *active_scene_object() const;
+	void place_linked(obs_sceneitem_t *item, obs_scene_t *main_scene, TwinLayout layout, double focus,
+			  bool has_camera) const;
+	void relayout_scene(obs_scene_t *scene, bool include_manual);
+	void relayout_all_linked();
+	void mark_manual(obs_sceneitem_t *item) const;
+	static void on_main_item_add(void *data, calldata_t *params);
+	static void on_main_item_remove(void *data, calldata_t *params);
+	static void on_main_item_visible(void *data, calldata_t *params);
+	static void on_main_item_transform(void *data, calldata_t *params);
+	void main_item_added(const std::string &main_uuid, std::int64_t id);
+	void main_item_removed(const std::string &main_uuid, std::int64_t id);
+	void main_item_visible(const std::string &main_uuid, std::int64_t id, bool visible);
+	void queue_relayout(const std::string &main_uuid);
 	std::optional<std::int64_t> add_to_active_scene(obs_source_t *source);
 
 	std::filesystem::path settings_path_;
@@ -195,6 +254,9 @@ private:
 	std::vector<OBSSignal> canvas_signals_;
 	// The items of the scene on the channel.
 	std::vector<OBSSignal> scene_signals_;
+	// The main scenes that have a linked vertical scene.
+	std::vector<OBSSignal> main_signals_;
+	std::vector<std::string> relayout_queue_;
 	OBSWeakSource watched_scene_;
 	std::atomic<bool> change_queued_{false};
 	// Receives queued work from libobs signals; destroying it drops what is still queued.

@@ -6,6 +6,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QDesktopServices>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -16,6 +17,7 @@
 #include <QLabel>
 #include <QLayoutItem>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -23,10 +25,30 @@
 #include <QScrollArea>
 #include <QStyle>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace multistream {
 namespace {
+
+constexpr const char *kSupportUrl = "https://ko-fi.com/alejoxcode";
+
+// A small coffee cup drawn here, so no third-party logo is bundled.
+QIcon cup_icon(const QColor &color)
+{
+	QPixmap pixmap(32, 32);
+	pixmap.fill(Qt::transparent);
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing);
+	painter.setPen(QPen(color, 2.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+	painter.setBrush(Qt::NoBrush);
+	painter.drawRoundedRect(QRectF(5.0, 12.0, 16.0, 14.0), 4.0, 4.0);
+	painter.drawArc(QRectF(17.0, 14.0, 10.0, 9.0), -90 * 16, 180 * 16);
+	painter.drawLine(QPointF(10.0, 4.0), QPointF(10.0, 8.0));
+	painter.drawLine(QPointF(16.0, 4.0), QPointF(16.0, 8.0));
+	painter.end();
+	return QIcon(pixmap);
+}
 
 constexpr int kPlatformIconSize = 20;
 constexpr int kDotSize = 10;
@@ -258,6 +280,14 @@ DestinationsDock::DestinationsDock(QWidget *parent) : QWidget(parent)
 	buttons->addWidget(stop_all_);
 	buttons->addWidget(settings_);
 	layout->addLayout(buttons);
+
+	support_ = new QPushButton(obs_module_text("Support.Link"), this);
+	support_->setFlat(true);
+	support_->setCursor(Qt::PointingHandCursor);
+	support_->setProperty("class", "text-muted");
+	support_->setIcon(cup_icon(palette().color(QPalette::PlaceholderText)));
+	connect(support_, &QPushButton::clicked, this, &DestinationsDock::show_support);
+	layout->addWidget(support_, 0, Qt::AlignHCenter);
 
 	apply_theme_icons();
 }
@@ -681,6 +711,22 @@ void DestinationsDock::changeEvent(QEvent *event)
 	    event->type() == QEvent::StyleChange) {
 		apply_theme_icons();
 		apply_row_icons_all();
+	}
+}
+
+void DestinationsDock::show_support()
+{
+	QMessageBox box(this);
+	box.setWindowTitle(obs_module_text("Support.Title"));
+	box.setIconPixmap(cup_icon(palette().color(QPalette::WindowText)).pixmap(48, 48));
+	box.setText(QStringLiteral("<b>%1</b>").arg(QString::fromUtf8(obs_module_text("Support.Headline")).toHtmlEscaped()));
+	box.setInformativeText(obs_module_text("Support.Body"));
+	QPushButton *give = box.addButton(obs_module_text("Support.Give"), QMessageBox::AcceptRole);
+	box.addButton(obs_module_text("Support.Later"), QMessageBox::RejectRole);
+	box.setDefaultButton(give);
+	box.exec();
+	if (box.clickedButton() == give) {
+		QDesktopServices::openUrl(QUrl(QString::fromUtf8(kSupportUrl)));
 	}
 }
 

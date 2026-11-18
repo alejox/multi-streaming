@@ -140,6 +140,9 @@ private:
 	void apply_row_icons(RowWidgets &widgets);
 	void apply_row_icons_all();
 	void apply_theme_icons();
+	// Ko-fi: the plugin stays free; those who can chip in keep it free for those who cannot.
+	void show_support();
+	QPushButton *support_ = nullptr;
 	void start_drag(QWidget *handle, const QString &id);
 	int drop_position(int y) const;
 	void show_drop_indicator(int position);

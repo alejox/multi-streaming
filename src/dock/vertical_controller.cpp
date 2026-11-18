@@ -23,6 +23,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <vector>
 
@@ -105,6 +106,28 @@ VerticalController::VerticalController(VerticalCanvas &canvas, StreamingEngine &
 	connect(dock, &VerticalDock::item_properties_requested, this,
 		[this](std::int64_t id) { canvas_.open_item_properties(id); });
 	connect(dock, &VerticalDock::resolution_settings_requested, this, &VerticalController::edit_resolution);
+	connect(dock, &VerticalDock::import_menu_requested, this, &VerticalController::show_import_menu);
+	connect(dock, &VerticalDock::link_layout_changed, this, [this](int layout, double focus) {
+		if (layout >= 0 && layout < static_cast<int>(std::size(kAllTwinLayouts))) {
+			canvas_.set_active_link_layout(kAllTwinLayouts[layout], focus);
+			canvas_.save_collection();
+		}
+	});
+	connect(dock, &VerticalDock::relayout_requested, this, [this](bool include_manual) {
+		canvas_.relayout_active(include_manual);
+		canvas_.save_collection();
+	});
+	connect(dock, &VerticalDock::unlink_requested, this, [this] {
+		if (confirm(dock_, text("Vertical.Unlink"), text("Vertical.UnlinkQuestion"))) {
+			canvas_.unlink_active();
+			canvas_.save_collection();
+		}
+	});
+	connect(dock, &VerticalDock::safe_zones_toggled, this, [this](bool shown) {
+		if (dock_) {
+			dock_->preview()->set_safe_zones(shown);
+		}
+	});
 
 	refresh();
 }
@@ -139,17 +162,73 @@ void VerticalController::refresh()
 			continue;
 		}
 		items.push_back({item.id, QString::fromStdString(item.name), data_icon_for(item.type_id), item.visible,
-				 item.locked});
+				 item.locked, item.manual});
 	}
 	dock_->set_items(items);
 	dock_->select_item(dock_->preview()->selected_item());
 	dock_->set_hidden_audio_items(hidden_audio);
 	dock_->set_resolution(canvas_.settings().width, canvas_.settings().height);
+
+	std::optional<VerticalLinkView> link;
+	if (const std::optional<ActiveLink> active = canvas_.active_link()) {
+		const auto *found = std::find(std::begin(kAllTwinLayouts), std::end(kAllTwinLayouts), active->layout);
+		link = VerticalLinkView{QString::fromStdString(active->main_name),
+					static_cast<int>(found - std::begin(kAllTwinLayouts)), active->focus};
+	}
+	dock_->set_link(link);
+}
+
+void VerticalController::show_import_menu(const QPoint &global_position)
+{
+	if (!dock_) {
+		return;
+	}
+	QMenu menu(dock_);
+	QAction *title = menu.addAction(text("Vertical.ImportHint"));
+	title->setEnabled(false);
+	menu.addSeparator();
+	for (const MainSceneChoice &choice : canvas_.main_scene_choices()) {
+		const QString name = QString::fromStdString(choice.name);
+		if (choice.vertical_scene) {
+			// Already linked: go to it.
+			const std::string vertical = *choice.vertical_scene;
+			menu.addAction(text("Vertical.ImportLinked").arg(name), this, [this, vertical] {
+				canvas_.switch_scene(vertical);
+				canvas_.save_collection();
+			});
+			continue;
+		}
+		const std::string uuid = choice.uuid;
+		menu.addAction(name, this, [this, uuid] {
+			if (!canvas_.import_main_scene(uuid, TwinLayout::CameraTop)) {
+				if (dock_) {
+					dock_->show_message(text("Vertical.ImportFailed"));
+				}
+				return;
+			}
+			if (dock_) {
+				dock_->show_message({});
+			}
+			canvas_.save_collection();
+		});
+	}
+	menu.exec(global_position);
 }
 
 void VerticalController::show_item_menu(std::int64_t id, const QPoint &global_position)
 {
 	QMenu menu(dock_);
+	const std::vector<VerticalItem> items = canvas_.items();
+	const auto found = std::find_if(items.begin(), items.end(), [id](const VerticalItem &item) { return item.id == id; });
+	if (found != items.end() && found->linked) {
+		QAction *back = menu.addAction(text("Vertical.BackToAuto"), this, [this, id] { canvas_.reset_item_to_auto(id); });
+		back->setEnabled(found->manual);
+		QAction *follow = menu.addAction(text("Vertical.FollowVisibility"));
+		follow->setCheckable(true);
+		follow->setChecked(canvas_.item_visibility_linked(id));
+		connect(follow, &QAction::toggled, this, [this, id](bool on) { canvas_.set_item_visibility_linked(id, on); });
+		menu.addSeparator();
+	}
 	menu.addAction(text("Vertical.Fit"), this, [this, id] { canvas_.fit_item(id); });
 	menu.addAction(text("Vertical.Fill"), this, [this, id] { canvas_.fill_item(id); });
 	menu.addAction(text("Vertical.Center"), this, [this, id] { canvas_.center_item(id); });

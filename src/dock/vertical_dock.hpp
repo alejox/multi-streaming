@@ -10,7 +10,9 @@
 #include <string>
 #include <vector>
 
+class QComboBox;
 class QLabel;
+class QSlider;
 class QListWidget;
 class QSplitter;
 class QToolButton;
@@ -26,6 +28,16 @@ struct VerticalItemView {
 	std::string icon_file;
 	bool visible = true;
 	bool locked = false;
+	// Moved by hand in a linked scene: the automatic layout leaves it alone.
+	bool manual = false;
+};
+
+// The active vertical scene's link to a main scene.
+struct VerticalLinkView {
+	QString main_name;
+	// Index in kAllTwinLayouts.
+	int layout = 0;
+	double focus = 0.5;
 };
 
 class VerticalDock final : public QWidget {
@@ -43,6 +55,7 @@ public:
 	void set_resolution(int width, int height);
 	void set_hidden_audio_items(int count);
 	void show_message(const QString &message);
+	void set_link(const std::optional<VerticalLinkView> &link);
 
 signals:
 	void scene_selected(const QString &name);
@@ -60,6 +73,11 @@ signals:
 	void item_properties_requested(std::int64_t id);
 	void remove_hidden_audio_requested();
 	void resolution_settings_requested();
+	void import_menu_requested(const QPoint &global_position);
+	void link_layout_changed(int layout, double focus);
+	void relayout_requested(bool include_manual);
+	void unlink_requested();
+	void safe_zones_toggled(bool shown);
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -88,6 +106,10 @@ private:
 	QLabel *empty_hint_;
 	QLabel *resolution_;
 	QLabel *audio_note_;
+	QWidget *link_bar_;
+	QLabel *link_label_;
+	QComboBox *link_layout_;
+	QSlider *link_focus_;
 	QSplitter *lists_;
 	QListWidget *scenes_;
 	QListWidget *items_;
