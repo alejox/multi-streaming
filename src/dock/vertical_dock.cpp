@@ -131,7 +131,7 @@ VerticalDock::VerticalDock(QWidget *parent)
 	safe_zones->setAccessibleName(text("Vertical.SafeZones"));
 	safe_zones->setToolButtonStyle(Qt::ToolButtonTextOnly);
 	safe_zones->setCheckable(true);
-	safe_zones->setChecked(true);
+	safe_zones->setChecked(false);
 	safe_zones->setAutoRaise(true);
 	connect(safe_zones, &QToolButton::toggled, this, &VerticalDock::safe_zones_toggled);
 

@@ -1011,7 +1011,13 @@ VerticalCanvas::BoxResult VerticalCanvas::set_item_box(std::int64_t id, const It
 
 	const vec2 position = {static_cast<float>(placement->position.x), static_cast<float>(placement->position.y)};
 	const vec2 scale = {static_cast<float>(placement->scale.x), static_cast<float>(placement->scale.y)};
-	mark_manual(item);
+	// Pinned only when it really moved: a drag back to where it was keeps it automatic.
+	if (const std::optional<ItemBox> current = box_of(item);
+	    !current || std::fabs(current->origin.x - box.origin.x) > 0.5 ||
+	    std::fabs(current->origin.y - box.origin.y) > 0.5 || std::fabs(current->width - box.width) > 0.5 ||
+	    std::fabs(current->height - box.height) > 0.5) {
+		mark_manual(item);
+	}
 	obs_sceneitem_defer_update_begin(item);
 	obs_sceneitem_set_bounds_type(item, OBS_BOUNDS_NONE);
 	obs_sceneitem_set_alignment(item, top_left());

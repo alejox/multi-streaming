@@ -90,7 +90,7 @@ private:
 	// Boxes of the other visible, unlocked items, to snap against.
 	std::vector<ItemBox> other_boxes() const;
 	void refresh_overlay();
-	bool safe_zones_ = true;
+	bool safe_zones_ = false;
 	void lose_selection();
 	void show_cursor(PreviewCursor cursor);
 	void nudge(NudgeDirection direction, bool shift);
