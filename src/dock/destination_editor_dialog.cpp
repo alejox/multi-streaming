@@ -102,12 +102,15 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	// Service and name, above the sections, like OBS's own Stream settings.
 	auto *identity_form = new_form();
 	service_ = new QComboBox(this);
+	const Platform initial_platform = effective_platform(initial.platform, initial.server_url);
 	for (const Platform platform : kAllPlatforms) {
+		if (!offered_in_editor(platform) && platform != initial_platform) {
+			continue;
+		}
 		service_->addItem(themed_icon(platform_icon_file(platform).c_str(), palette()),
 				  text(platform_text_key("Platform.", platform).c_str()), static_cast<int>(platform));
 	}
-	service_->setCurrentIndex(
-		service_->findData(static_cast<int>(effective_platform(initial.platform, initial.server_url))));
+	service_->setCurrentIndex(service_->findData(static_cast<int>(initial_platform)));
 	add_row(identity_form, "Editor.Service", service_);
 	connect(service_, &QComboBox::activated, this, &DestinationEditorDialog::service_picked);
 

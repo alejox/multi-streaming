@@ -151,4 +151,9 @@ std::string url_after_picking(Platform platform, const std::string &current_url)
 	return current_url;
 }
 
+bool offered_in_editor(Platform platform)
+{
+	return platform != Platform::Facebook && platform != Platform::TikTok && platform != Platform::X;
+}
+
 } // namespace multistream

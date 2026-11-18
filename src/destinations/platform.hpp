@@ -23,6 +23,10 @@ std::optional<Platform> platform_from_id(std::string_view id);
 
 Platform detect_platform(std::string_view server_url);
 
+// Whether the editor offers the service for new destinations. Facebook, TikTok and X are
+// not offered; a destination saved with one keeps it.
+bool offered_in_editor(Platform platform);
+
 // What the user picked, else what the URL shows.
 Platform effective_platform(std::optional<Platform> stored, std::string_view server_url);
 

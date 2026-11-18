@@ -133,3 +133,14 @@ TEST_CASE(stream_key_pages_are_https_and_on_their_service)
 		}
 	}
 }
+
+TEST_CASE(the_editor_does_not_offer_facebook_tiktok_or_x)
+{
+	CHECK(!offered_in_editor(Platform::Facebook));
+	CHECK(!offered_in_editor(Platform::TikTok));
+	CHECK(!offered_in_editor(Platform::X));
+	for (const Platform platform : {Platform::Custom, Platform::YouTube, Platform::Kick, Platform::Twitch,
+					Platform::Instagram}) {
+		CHECK(offered_in_editor(platform));
+	}
+}
