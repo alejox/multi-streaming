@@ -197,10 +197,11 @@ jobs:
           path: ${{ env.PACKAGE }}
           if-no-files-found: error
 
-  # A tag v<version> publishes the three packages. GitHub records each asset's SHA-256
+  # Publishes the three packages as release v<version> when main (or a matching tag) has a
+  # buildspec.json version that has no release yet. GitHub records each asset's SHA-256
   # digest, which the in-plugin updater verifies before installing.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [macos-arm64, windows-x64, linux-x86_64]
     runs-on: ubuntu-24.04
     permissions:
@@ -208,21 +209,37 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -r .version buildspec.json)"
+          tag="v${version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${tag}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match buildspec.json version ${version}" >&2
+            exit 1
+          fi
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists: nothing to publish."
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/download-artifact@v7
+        if: steps.version.outputs.publish == 'true'
         with:
           path: packages
           merge-multiple: true
 
       - name: Publish
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          version="$(jq -r .version buildspec.json)"
-          if [ "v${version}" != "${tag}" ]; then
-            echo "Tag ${tag} does not match buildspec.json version ${version}" >&2
-            exit 1
-          fi
-          notes=".github/release-notes/${tag}.md"
           ls -l packages
-          gh release create "${tag}" packages/* --title "${tag}" --notes-file "${notes}"
+          gh release create "${TAG}" packages/* --target "${GITHUB_SHA}" --title "${TAG}" \
+            --notes-file ".github/release-notes/${TAG}.md"
