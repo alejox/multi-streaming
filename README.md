@@ -29,8 +29,9 @@
 | 🎯 | **Servicios predefinidos** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram o un servidor personalizado. Enlaces a la página de la clave de transmisión de YouTube, Twitch, Kick y Facebook |
 | 📱 | **Lienzo vertical** | Un segundo lienzo (1080x1920 por defecto) con sus propias escenas, fuentes, vista previa y composición Ajustar/Rellenar, en su propio panel |
 | 🪄 | **Importar desde horizontal** | Crea la versión vertical de una escena con **sus mismas fuentes**, acomodadas solas: cámara arriba, capturas reencuadradas, fondos a pantalla completa y overlays anclados a su esquina |
-| 🔗 | **Escenas vinculadas** | La escena vertical sigue a la horizontal: cambia junto con el programa de OBS, y lo que agregas, quitas, mueves u ocultas allá se refleja aquí. Lo que ajustas a mano en vertical se respeta |
+| 🔗 | **Escenas vinculadas** | La escena vertical sigue a la horizontal: cambia junto con el programa de OBS, y lo que agregas, quitas, mueves u ocultas allá se refleja aquí. Lo que ajustas a mano en vertical se respeta. Una escena vertical hecha a mano también puede seguir a una horizontal, sin importar nada |
 | 📐 | **Plantillas y enfoque** | Cámara arriba, Pantalla completa o Cámara grande, y un control de enfoque para elegir qué parte de la captura se ve |
+| 🎚️ | **Resolución por destino** | Cada destino con codificación personalizada sale a su propia resolución (4K, 2K, 1080p, 720p) desde el mismo lienzo: 1440p a YouTube y 1080p a Kick a la vez |
 | 📲 | **Zonas seguras** | Sombrea en la vista previa donde TikTok, Shorts y Reels ponen sus botones y el texto |
 | 🎞️ | **Fuente de video por destino** | Cada destino envía la mezcla `main` o el lienzo `vertical` |
 | ⚙️ | **Codificadores inteligentes** | Los destinos comparten codificador cuando su configuración coincide, y usan uno dedicado cuando no |
@@ -311,7 +312,7 @@ La limpieza manual de la colección se ha probado una vez.
 
 | Comprobación | Resultado |
 |--------------|-----------|
-| Pruebas del núcleo | ✅ 39 de 39 pasan |
+| Pruebas del núcleo | ✅ 40 de 40 pasan |
 | El plugin carga y descarga en OBS 33.0.1 (macOS) | ✅ Pasa |
 | Transmisión principal y vertical a la vez | ✅ Pasa: 640x360 y 1080x1920 en receptores RTMP locales |
 | Reintentos agotados, puerto cerrado, salir en vivo | ✅ Pasa, varias ejecuciones |

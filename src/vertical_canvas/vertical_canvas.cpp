@@ -1505,6 +1505,17 @@ std::optional<ActiveLink> VerticalCanvas::active_link() const
 	active.main_name = main_source ? obs_source_get_name(main_source) : "";
 	active.layout = link.layout;
 	active.focus = link.focus;
+	obs_scene_enum_items(
+		scene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+			OBSDataAutoRelease settings = obs_sceneitem_get_private_settings(item);
+			if (obs_data_has_user_value(settings, kLink)) {
+				*static_cast<bool *>(param) = true;
+				return false;
+			}
+			return true;
+		},
+		&active.automatic);
 	return active;
 }
 
@@ -1541,6 +1552,43 @@ bool VerticalCanvas::unlink_active()
 	if (scene == nullptr) {
 		return false;
 	}
+	unlink_scene(scene);
+	refresh_links();
+	notify();
+	return true;
+}
+
+bool VerticalCanvas::link_active_to(const std::string &main_uuid)
+{
+	obs_scene_t *scene = active_scene_object();
+	OBSSourceAutoRelease main_source = obs_get_source_by_uuid(main_uuid.c_str());
+	if (scene == nullptr || !obs_scene_from_source(main_source)) {
+		return false;
+	}
+	obs_scene_t *previous = linked_scene_for(main_uuid);
+	if (previous == scene) {
+		return true;
+	}
+	if (previous != nullptr) {
+		unlink_scene(previous);
+	}
+	// A scene follows one main scene: following another drops what was linked to the old one.
+	if (!link_of(obs_scene_get_source(scene)).empty()) {
+		unlink_scene(scene);
+	}
+	{
+		OBSDataAutoRelease settings = obs_source_get_private_settings(obs_scene_get_source(scene));
+		obs_data_set_string(settings, kLinkOf, main_uuid.c_str());
+		obs_data_set_default_string(settings, kLayout, std::string(twin_layout_id(TwinLayout::CameraTop)).c_str());
+	}
+	refresh_links();
+	follow_program();
+	notify();
+	return true;
+}
+
+void VerticalCanvas::unlink_scene(obs_scene_t *scene)
+{
 	{
 		OBSDataAutoRelease settings = obs_source_get_private_settings(obs_scene_get_source(scene));
 		obs_data_erase(settings, kLinkOf);
@@ -1556,9 +1604,6 @@ bool VerticalCanvas::unlink_active()
 			return true;
 		},
 		nullptr);
-	refresh_links();
-	notify();
-	return true;
 }
 
 bool VerticalCanvas::reset_item_to_auto(std::int64_t id)

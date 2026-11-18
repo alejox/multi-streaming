@@ -19,6 +19,7 @@ Destination full_destination()
 	destination.encoder.mode = EncoderMode::Custom;
 	destination.encoder.video_bitrate_kbps = 4500;
 	destination.encoder.video_encoder_id = "com.apple.videotoolbox.videoencoder.ave.avc";
+	destination.encoder.output_short_side = 720;
 	destination.audio_track = 3;
 	destination.sync_with_main = true;
 	destination.reconnect = *ReconnectPolicy::create(5, 3);
@@ -239,4 +240,13 @@ TEST_CASE(a_platform_of_the_wrong_type_is_an_invalid_entry)
 	const auto *error = std::get_if<multistream::ConfigError>(&decoded);
 	REQUIRE(error != nullptr);
 	CHECK(error->kind == multistream::ConfigErrorKind::InvalidEntry);
+}
+
+TEST_CASE(a_config_without_an_output_resolution_sends_the_canvas_size)
+{
+	const auto decoded = decode_config(R"({"schema_version":2,"destinations":[{"id":"a","name":"A",
+		"server_url":"rtmp://localhost/live","encoder":{"mode":"custom","video_bitrate_kbps":6000,
+		"video_encoder_id":"obs_x264"}}]})");
+	REQUIRE(std::holds_alternative<DestinationsConfig>(decoded));
+	CHECK_EQ(std::get<DestinationsConfig>(decoded).destinations.at(0).encoder.output_short_side, 0);
 }

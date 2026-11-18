@@ -1,5 +1,7 @@
 #include "destinations/validation.hpp"
 
+#include "destinations/output_resolution.hpp"
+
 #include <algorithm>
 #include <cctype>
 
@@ -161,6 +163,9 @@ std::vector<ValidationIssue> validate_destination(const Destination &destination
 		}
 		if (destination.encoder.video_encoder_id.empty()) {
 			issues.push_back({DestinationField::VideoEncoder, Message("Validation.EncoderRequired")});
+		}
+		if (!is_valid_output_short_side(destination.encoder.output_short_side)) {
+			issues.push_back({DestinationField::OutputResolution, Message("Validation.OutputResolution")});
 		}
 	}
 

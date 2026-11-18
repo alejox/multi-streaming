@@ -210,3 +210,16 @@ TEST_CASE(followers_keep_sharing_one_dedicated_encoder_when_main_is_inactive)
 	CHECK_EQ(plan[0].video_key, plan[1].video_key);
 	CHECK_EQ(plan[0].audio_key, plan[1].audio_key);
 }
+
+TEST_CASE(a_scaled_output_never_reuses_main_and_keys_by_resolution)
+{
+	Destination at_1080 = following(custom("a", 6000, "x264"));
+	at_1080.encoder.output_short_side = 1080;
+	Destination at_720 = following(custom("b", 6000, "x264"));
+	at_720.encoder.output_short_side = 720;
+	const auto plan = plan_encoders({at_1080, at_720}, active_main());
+	REQUIRE(plan.size() == 2);
+	CHECK(!plan[0].reuse_main_video);
+	CHECK(!plan[1].reuse_main_video);
+	CHECK(plan[0].video_key != plan[1].video_key);
+}

@@ -38,6 +38,7 @@ struct VerticalLinkView {
 	// Index in kAllTwinLayouts.
 	int layout = 0;
 	double focus = 0.5;
+	bool automatic = false;
 };
 
 class VerticalDock final : public QWidget {
@@ -110,6 +111,9 @@ private:
 	QLabel *link_label_;
 	QComboBox *link_layout_;
 	QSlider *link_focus_;
+	QWidget *link_controls_;
+	QAction *relayout_auto_;
+	QAction *relayout_all_;
 	QSplitter *lists_;
 	QListWidget *scenes_;
 	QListWidget *items_;

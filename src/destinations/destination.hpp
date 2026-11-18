@@ -15,17 +15,20 @@ enum class VideoSource { Main, Vertical };
 
 enum class EncoderMode { Share, Custom };
 
-// video_bitrate_kbps and video_encoder_id apply to Custom. They are kept under
-// Share so that switching modes in the editor does not lose them.
+// video_bitrate_kbps, video_encoder_id and output_short_side apply to Custom. They are
+// kept under Share so that switching modes in the editor does not lose them.
 struct EncoderPreference {
 	EncoderMode mode = EncoderMode::Share;
 	int video_bitrate_kbps = 0;
 	std::string video_encoder_id;
+	// The output resolution by its short side (1080 = 1080p); 0 sends the canvas size.
+	// See output_resolution.hpp.
+	int output_short_side = 0;
 
 	bool operator==(const EncoderPreference &other) const
 	{
 		return mode == other.mode && video_bitrate_kbps == other.video_bitrate_kbps &&
-		       video_encoder_id == other.video_encoder_id;
+		       video_encoder_id == other.video_encoder_id && output_short_side == other.output_short_side;
 	}
 };
 

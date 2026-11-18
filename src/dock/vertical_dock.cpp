@@ -76,6 +76,9 @@ VerticalDock::VerticalDock(QWidget *parent)
 	  link_label_(new QLabel()),
 	  link_layout_(new QComboBox()),
 	  link_focus_(new QSlider(Qt::Horizontal)),
+	  link_controls_(new QWidget()),
+	  relayout_auto_(nullptr),
+	  relayout_all_(nullptr),
 	  lists_(new QSplitter(Qt::Horizontal)),
 	  scenes_(new SceneList()),
 	  items_(new QListWidget())
@@ -166,8 +169,10 @@ VerticalDock::VerticalDock(QWidget *parent)
 	relayout->setToolButtonStyle(Qt::ToolButtonTextOnly);
 	relayout->setPopupMode(QToolButton::InstantPopup);
 	auto *relayout_menu = new QMenu(relayout);
-	relayout_menu->addAction(text("Vertical.RelayoutAuto"), this, [this] { emit relayout_requested(false); });
-	relayout_menu->addAction(text("Vertical.RelayoutAll"), this, [this] { emit relayout_requested(true); });
+	relayout_auto_ = relayout_menu->addAction(text("Vertical.RelayoutAuto"), this,
+						  [this] { emit relayout_requested(false); });
+	relayout_all_ =
+		relayout_menu->addAction(text("Vertical.RelayoutAll"), this, [this] { emit relayout_requested(true); });
 	relayout_menu->addSeparator();
 	relayout_menu->addAction(text("Vertical.Unlink"), this, [this] { emit unlink_requested(); });
 	relayout->setMenu(relayout_menu);
@@ -178,7 +183,7 @@ VerticalDock::VerticalDock(QWidget *parent)
 	link_top->setContentsMargins(0, 0, 0, 0);
 	link_top->addWidget(link_label_, 1);
 	link_top->addWidget(relayout);
-	auto *link_controls = new QHBoxLayout();
+	auto *link_controls = new QHBoxLayout(link_controls_);
 	link_controls->setContentsMargins(0, 0, 0, 0);
 	link_controls->addWidget(link_layout_);
 	link_controls->addSpacing(8);
@@ -188,7 +193,7 @@ VerticalDock::VerticalDock(QWidget *parent)
 	link_layout->setContentsMargins(0, 4, 0, 4);
 	link_layout->setSpacing(4);
 	link_layout->addLayout(link_top);
-	link_layout->addLayout(link_controls);
+	link_layout->addWidget(link_controls_);
 	link_bar_->hide();
 
 	// The slider sends a burst while dragged: one layout once it rests.
@@ -524,6 +529,9 @@ void VerticalDock::set_link(const std::optional<VerticalLinkView> &link)
 	updating_ = true;
 	link_label_->setText(link->main_name.isEmpty() ? text("Vertical.LinkedMissing")
 						       : text("Vertical.LinkedTo").arg(link->main_name));
+	link_controls_->setVisible(link->automatic);
+	relayout_auto_->setVisible(link->automatic);
+	relayout_all_->setVisible(link->automatic);
 	link_layout_->setCurrentIndex(link->layout);
 	if (!link_focus_->isSliderDown()) {
 		link_focus_->setValue(static_cast<int>(std::lround(link->focus * 100.0)));

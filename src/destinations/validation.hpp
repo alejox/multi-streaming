@@ -10,7 +10,7 @@
 
 namespace multistream {
 
-enum class DestinationField { Id, Name, ServerUrl, VideoBitrate, VideoEncoder, AudioTrack };
+enum class DestinationField { Id, Name, ServerUrl, VideoBitrate, VideoEncoder, OutputResolution, AudioTrack };
 
 struct ValidationIssue {
 	DestinationField field;

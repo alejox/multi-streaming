@@ -1,6 +1,7 @@
 #include "streaming/streaming_engine.hpp"
 
 #include "destinations/connect_gate.hpp"
+#include "destinations/output_resolution.hpp"
 #include "destinations/reconnect_history.hpp"
 #include "destinations/session_selection.hpp"
 #include "destinations/validation.hpp"
@@ -687,6 +688,19 @@ obs_encoder_t *StreamingEngine::lease_video_encoder(const EncoderAssignment &ass
 		if (assignment.video_encoder.mode == EncoderMode::Share &&
 		    assignment.video_source == VideoSource::Main) {
 			copy_main_scaling(created, main_stream.video);
+		}
+		// Custom: the destination's own output resolution, from its canvas keeping the aspect.
+		if (assignment.video_encoder.mode == EncoderMode::Custom) {
+			video_t *video = video_sources_.video_for(assignment.video_source);
+			if (video != nullptr) {
+				if (const auto size = scaled_output_size(static_cast<int>(video_output_get_width(video)),
+									 static_cast<int>(video_output_get_height(video)),
+									 assignment.video_encoder.output_short_side)) {
+					obs_encoder_set_scaled_size(created, static_cast<uint32_t>(size->width),
+								    static_cast<uint32_t>(size->height));
+					obs_encoder_set_gpu_scale_type(created, OBS_SCALE_LANCZOS);
+				}
+			}
 		}
 		encoder = created.Get();
 	}

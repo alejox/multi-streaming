@@ -86,3 +86,17 @@ TEST_CASE(audio_track_does_not_split_a_video_encoder_group)
 	second.audio_track = 4;
 	CHECK_EQ(group_by_encoder({first, second}).size(), std::size_t{1});
 }
+
+TEST_CASE(different_output_resolutions_need_their_own_encoders)
+{
+	Destination youtube = custom("youtube", VideoSource::Main, 6000, "obs_x264");
+	youtube.encoder.output_short_side = 1440;
+	Destination twitch = custom("twitch", VideoSource::Main, 6000, "obs_x264");
+	twitch.encoder.output_short_side = 1080;
+	Destination kick = custom("kick", VideoSource::Main, 6000, "obs_x264");
+	kick.encoder.output_short_side = 1080;
+	const auto groups = group_by_encoder({youtube, twitch, kick});
+	REQUIRE(groups.size() == 2);
+	CHECK_EQ(groups[0].destination_ids.size(), std::size_t{1});
+	CHECK_EQ(groups[1].destination_ids.size(), std::size_t{2});
+}

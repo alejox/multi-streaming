@@ -12,6 +12,9 @@ std::string video_key_for(const EncoderGroup &group)
 	std::string key = group.video_source == VideoSource::Vertical ? "video-vertical" : "video-main";
 	if (group.encoder.mode == EncoderMode::Custom) {
 		key += "-" + group.encoder.video_encoder_id + "-" + std::to_string(group.encoder.video_bitrate_kbps);
+		if (group.encoder.output_short_side != 0) {
+			key += "-" + std::to_string(group.encoder.output_short_side) + "p";
+		}
 	} else {
 		key += "-share";
 	}
@@ -34,7 +37,9 @@ bool can_reuse_main_video(const Destination &destination, const EncoderGroup &gr
 	if (group.encoder.mode == EncoderMode::Share) {
 		return true;
 	}
-	return !main_stream.video_scaled && group.encoder.video_encoder_id == main_stream.video_encoder_id &&
+	// A scaled output never reuses main's encoder, which sends the canvas size or its own rescale.
+	return !main_stream.video_scaled && group.encoder.output_short_side == 0 &&
+	       group.encoder.video_encoder_id == main_stream.video_encoder_id &&
 	       group.encoder.video_bitrate_kbps == main_stream.video_bitrate_kbps;
 }
 

@@ -36,7 +36,8 @@ json encode_destination(const Destination &destination)
 		{"encoder",
 		 {{"mode", to_json_name(destination.encoder.mode)},
 		  {"video_bitrate_kbps", destination.encoder.video_bitrate_kbps},
-		  {"video_encoder_id", destination.encoder.video_encoder_id}}},
+		  {"video_encoder_id", destination.encoder.video_encoder_id},
+		  {"output_short_side", destination.encoder.output_short_side}}},
 		{"audio_track", destination.audio_track},
 		{"sync_with_main", destination.sync_with_main},
 		{"reconnect",
@@ -128,6 +129,8 @@ EncoderPreference decode_encoder(const json &entry)
 	}
 	encoder.video_bitrate_kbps = optional_int(*object, "video_bitrate_kbps", 0);
 	encoder.video_encoder_id = optional_string(*object, "video_encoder_id", "");
+	// Older configs have no field: they send the canvas size, as before.
+	encoder.output_short_side = optional_int(*object, "output_short_side", 0);
 	return encoder;
 }
 

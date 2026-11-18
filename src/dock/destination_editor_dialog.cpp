@@ -1,6 +1,7 @@
 #include "dock/destination_editor_dialog.hpp"
 
 #include "destinations/destination_editing.hpp"
+#include "destinations/output_resolution.hpp"
 #include "dock/icons.hpp"
 #include "oauth/twitch_client_id.hpp"
 #include "oauth/twitch_connect_flow.hpp"
@@ -233,6 +234,27 @@ DestinationEditorDialog::DestinationEditorDialog(const Destination &initial, boo
 	field_rows_[DestinationField::VideoBitrate] = add_field(output_form_, "Editor.Bitrate", bitrate_);
 	connect(bitrate_, &QSpinBox::valueChanged, this,
 		[this] { clear_error(field_rows_[DestinationField::VideoBitrate]); });
+
+	// Each service takes its own maximum: one canvas can feed 1440p to YouTube and 1080p to Kick.
+	output_resolution_ = new QComboBox(this);
+	output_resolution_->addItem(text("Editor.ResolutionCanvas"), kCanvasOutput);
+	for (const int short_side : output_short_side_presets()) {
+		const std::string key = "Editor.Resolution." + std::to_string(short_side);
+		output_resolution_->addItem(text(key.c_str()), short_side);
+	}
+	const int initial_short_side = initial.encoder.output_short_side;
+	if (output_resolution_->findData(initial_short_side) < 0) {
+		output_resolution_->addItem(QStringLiteral("%1p").arg(initial_short_side), initial_short_side);
+	}
+	output_resolution_->setCurrentIndex(output_resolution_->findData(initial_short_side));
+	output_resolution_->setToolTip(text("Editor.ResolutionHint"));
+	field_rows_[DestinationField::OutputResolution] =
+		add_field(output_form_, "Editor.Resolution", output_resolution_);
+	resolution_note_ = add_note(output_form_, "text-muted");
+	connect(output_resolution_, &QComboBox::currentIndexChanged, this, [this] {
+		clear_error(field_rows_[DestinationField::OutputResolution]);
+		update_resolution_note();
+	});
 
 	// When to go live: both choices stay in view, since most users set them.
 	auto *start_form = new_form();
@@ -471,6 +493,7 @@ Destination DestinationEditorDialog::read_destination() const
 	destination.encoder.mode = static_cast<EncoderMode>(encoder_mode_->currentData().toInt());
 	destination.encoder.video_bitrate_kbps = bitrate_->value();
 	destination.encoder.video_encoder_id = encoder_id_->currentData().toString().toStdString();
+	destination.encoder.output_short_side = output_resolution_->currentData().toInt();
 	destination.audio_track = audio_track_->currentData().toInt();
 	destination.sync_with_main = sync_with_main_->isChecked();
 
@@ -541,6 +564,7 @@ void DestinationEditorDialog::service_picked()
 	update_server_url_mode();
 	update_key_link();
 	update_connect_visibility();
+	update_resolution_note();
 }
 
 void DestinationEditorDialog::update_server_url_mode()
@@ -593,11 +617,32 @@ void DestinationEditorDialog::update_custom_fields()
 	const bool custom = static_cast<EncoderMode>(encoder_mode_->currentData().toInt()) == EncoderMode::Custom;
 	output_form_->setRowVisible(encoder_id_, custom);
 	output_form_->setRowVisible(bitrate_, custom);
+	output_form_->setRowVisible(output_resolution_, custom);
 	if (!custom) {
 		clear_error(field_rows_[DestinationField::VideoEncoder]);
 		clear_error(field_rows_[DestinationField::VideoBitrate]);
+		clear_error(field_rows_[DestinationField::OutputResolution]);
 	}
+	update_resolution_note();
 	fit_to_contents();
+}
+
+// What the picked service takes, so a 1440p canvas is not sent where only 1080p is accepted.
+void DestinationEditorDialog::update_resolution_note()
+{
+	if (resolution_note_ == nullptr || output_resolution_ == nullptr) {
+		return;
+	}
+	const bool custom = static_cast<EncoderMode>(encoder_mode_->currentData().toInt()) == EncoderMode::Custom;
+	const std::string key = platform_text_key("Editor.ResolutionLimit.", current_platform());
+	const char *limit = obs_module_text(key.c_str());
+	const bool known = limit != nullptr && key != limit;
+	QString note = known ? QString::fromUtf8(limit) : QString();
+	if (!custom && known) {
+		note += QStringLiteral(" ") + text("Editor.ResolutionNeedsCustom");
+	}
+	resolution_note_->setText(note);
+	resolution_note_->setVisible(!note.isEmpty());
 }
 
 void DestinationEditorDialog::update_connect_visibility()

@@ -173,7 +173,8 @@ void VerticalController::refresh()
 	if (const std::optional<ActiveLink> active = canvas_.active_link()) {
 		const auto *found = std::find(std::begin(kAllTwinLayouts), std::end(kAllTwinLayouts), active->layout);
 		link = VerticalLinkView{QString::fromStdString(active->main_name),
-					static_cast<int>(found - std::begin(kAllTwinLayouts)), active->focus};
+					static_cast<int>(found - std::begin(kAllTwinLayouts)), active->focus,
+					active->automatic};
 	}
 	dock_->set_link(link);
 }
@@ -184,10 +185,38 @@ void VerticalController::show_import_menu(const QPoint &global_position)
 		return;
 	}
 	QMenu menu(dock_);
-	QAction *title = menu.addAction(text("Vertical.ImportHint"));
+	const std::vector<MainSceneChoice> choices = canvas_.main_scene_choices();
+	const std::optional<std::string> active = canvas_.active_scene();
+
+	// Existing vertical scene: follow a main scene as it is, nothing imported.
+	if (active) {
+		QMenu *follow = menu.addMenu(text("Vertical.LinkTo"));
+		follow->setToolTipsVisible(true);
+		follow->setToolTip(text("Vertical.LinkToHint"));
+		QAction *section = follow->addAction(text("Vertical.LinkSection"));
+		section->setEnabled(false);
+		for (const MainSceneChoice &choice : choices) {
+			const QString name = QString::fromStdString(choice.name);
+			const bool mine = choice.vertical_scene && *choice.vertical_scene == *active;
+			const QString label = choice.vertical_scene && !mine
+						      ? text("Vertical.LinkTaken")
+								.arg(name, QString::fromStdString(*choice.vertical_scene))
+						      : name;
+			QAction *action = follow->addAction(label);
+			action->setCheckable(true);
+			action->setChecked(mine);
+			const std::string uuid = choice.uuid;
+			connect(action, &QAction::triggered, this, [this, uuid] {
+				canvas_.link_active_to(uuid);
+				canvas_.save_collection();
+			});
+		}
+		menu.addSeparator();
+	}
+
+	QAction *title = menu.addAction(text("Vertical.ImportSection"));
 	title->setEnabled(false);
-	menu.addSeparator();
-	for (const MainSceneChoice &choice : canvas_.main_scene_choices()) {
+	for (const MainSceneChoice &choice : choices) {
 		const QString name = QString::fromStdString(choice.name);
 		if (choice.vertical_scene) {
 			// Already linked: go to it.

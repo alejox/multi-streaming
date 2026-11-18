@@ -78,6 +78,7 @@ private:
 	bool show_field_error(FieldRow &row, const QString &message);
 	void show_error(QLabel *label, const QString &message);
 	void update_custom_fields();
+	void update_resolution_note();
 	void service_picked();
 	void update_server_url_mode();
 	void update_service_hint();
@@ -132,6 +133,8 @@ private:
 	QComboBox *encoder_mode_ = nullptr;
 	QComboBox *encoder_id_ = nullptr;
 	QSpinBox *bitrate_ = nullptr;
+	QComboBox *output_resolution_ = nullptr;
+	QLabel *resolution_note_ = nullptr;
 	QCheckBox *enabled_ = nullptr;
 	QCheckBox *sync_with_main_ = nullptr;
 	QToolButton *advanced_toggle_ = nullptr;

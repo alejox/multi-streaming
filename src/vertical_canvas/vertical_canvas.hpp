@@ -98,6 +98,8 @@ struct ActiveLink {
 	std::string main_name;
 	TwinLayout layout = TwinLayout::CameraTop;
 	double focus = 0.5;
+	// Imported items placed by the automatic layout; none when the scene only follows.
+	bool automatic = false;
 };
 
 class VerticalCanvas final : public VideoSources {
@@ -176,6 +178,10 @@ public:
 	bool relayout_active(bool include_manual);
 	// The scene and its items stay as they are, they just stop following the main scene.
 	bool unlink_active();
+	// Makes the active vertical scene follow a main scene without importing anything: it
+	// comes on the canvas when that scene goes on air. A main scene has one linked vertical
+	// scene, so another one that followed it stops following.
+	bool link_active_to(const std::string &main_uuid);
 	bool reset_item_to_auto(std::int64_t id);
 	bool item_visibility_linked(std::int64_t id) const;
 	bool set_item_visibility_linked(std::int64_t id, bool linked);
@@ -232,6 +238,7 @@ private:
 			  bool has_camera) const;
 	void relayout_scene(obs_scene_t *scene, bool include_manual);
 	void relayout_all_linked();
+	void unlink_scene(obs_scene_t *scene);
 	void mark_manual(obs_sceneitem_t *item) const;
 	static void on_main_item_add(void *data, calldata_t *params);
 	static void on_main_item_remove(void *data, calldata_t *params);

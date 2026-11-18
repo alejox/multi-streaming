@@ -29,8 +29,9 @@
 | 🎯 | **Service presets** | YouTube, Twitch, Kick, Facebook, TikTok, X, Instagram, or a custom server. Links to the stream key page for YouTube, Twitch, Kick and Facebook |
 | 📱 | **Vertical canvas** | A second canvas (default 1080x1920) with its own scenes, sources, preview, and Fit/Fill composition, in its own dock |
 | 🪄 | **Import from horizontal** | Creates the vertical version of a scene with **the same sources**, laid out for you: camera on top, captures reframed, backgrounds full screen, overlays anchored to their corner |
-| 🔗 | **Linked scenes** | The vertical scene follows the horizontal one: it switches with OBS's program, and what you add, remove, move or hide there shows up here. Hand-made adjustments in vertical are kept |
+| 🔗 | **Linked scenes** | The vertical scene follows the horizontal one: it switches with OBS's program, and what you add, remove, move or hide there shows up here. Hand-made adjustments in vertical are kept. A vertical scene you built by hand can also follow a horizontal one, nothing imported |
 | 📐 | **Templates and focus** | Camera on top, Full screen or Big camera, plus a focus control for which part of the capture shows |
+| 🎚️ | **Per-destination resolution** | Each destination with custom encoding goes out at its own resolution (4K, 2K, 1080p, 720p) from the same canvas: 1440p to YouTube and 1080p to Kick at once |
 | 📲 | **Safe zones** | Shades in the preview where TikTok, Shorts and Reels put their buttons and captions |
 | 🎞️ | **Video source per destination** | Each destination sends the `main` mix or the `vertical` canvas |
 | ⚙️ | **Smart encoders** | Destinations share an encoder when their settings match, and get a dedicated one when they don't |
@@ -311,7 +312,7 @@ The manual collection cleanup has been tested once.
 
 | Check | Result |
 |-------|--------|
-| Core tests | ✅ 39 of 39 pass |
+| Core tests | ✅ 40 of 40 pass |
 | Plugin loads and unloads in OBS 33.0.1 (macOS) | ✅ Pass |
 | Main and vertical streaming together | ✅ Pass: 640x360 and 1080x1920 on local RTMP sinks |
 | Retries exhausted, closed port, exit while live | ✅ Pass, repeated runs |

@@ -164,3 +164,17 @@ TEST_CASE(destination_problems_are_reported_as_locale_keys)
 	CHECK(keys == (std::set<std::string>{"Validation.NameRequired", "Validation.AudioTrack", "Validation.Bitrate",
 					     "Validation.EncoderRequired"}));
 }
+
+TEST_CASE(custom_output_resolution_must_be_even_and_in_range)
+{
+	Destination destination = valid_destination();
+	destination.encoder.mode = EncoderMode::Custom;
+	destination.encoder.video_bitrate_kbps = 6000;
+	destination.encoder.video_encoder_id = "obs_x264";
+	destination.encoder.output_short_side = 1080;
+	CHECK(validate_destination(destination).empty());
+	destination.encoder.output_short_side = 1081;
+	CHECK(has_issue(validate_destination(destination), DestinationField::OutputResolution));
+	destination.encoder.mode = EncoderMode::Share;
+	CHECK(validate_destination(destination).empty());
+}

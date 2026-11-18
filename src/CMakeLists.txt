@@ -22,6 +22,7 @@ add_library(
   destinations/encoder_groups.cpp
   destinations/encoder_leases.cpp
   destinations/encoder_plan.cpp
+  destinations/output_resolution.cpp
   destinations/platform.cpp
   destinations/reconnect_history.cpp
   destinations/reconnect_policy.cpp

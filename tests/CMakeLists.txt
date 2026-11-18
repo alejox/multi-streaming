@@ -43,6 +43,7 @@ add_core_test(destination_removal_test destinations/destination_removal_test.cpp
 add_core_test(destination_ordering_test destinations/destination_ordering_test.cpp)
 add_core_test(destination_editing_test destinations/destination_editing_test.cpp)
 add_core_test(encoder_plan_test destinations/encoder_plan_test.cpp)
+add_core_test(output_resolution_test destinations/output_resolution_test.cpp)
 add_core_test(encoder_leases_test destinations/encoder_leases_test.cpp)
 add_core_test(start_tickets_test destinations/start_tickets_test.cpp)
 add_core_test(session_selection_test destinations/session_selection_test.cpp)
