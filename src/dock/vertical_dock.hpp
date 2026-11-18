@@ -3,6 +3,8 @@
 #pragma once
 
 #include <QString>
+#include "vertical_canvas/twitch_dual_format.hpp"
+
 #include <QWidget>
 
 #include <cstdint>
@@ -57,6 +59,7 @@ public:
 	void set_hidden_audio_items(int count);
 	void show_message(const QString &message);
 	void set_link(const std::optional<VerticalLinkView> &link);
+	void set_twitch_dual_format(TwitchDualFormat state);
 
 signals:
 	void scene_selected(const QString &name);
@@ -79,6 +82,8 @@ signals:
 	void relayout_requested(bool include_manual);
 	void unlink_requested();
 	void safe_zones_toggled(bool shown);
+	void monitor_requested();
+	void twitch_help_requested();
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -107,6 +112,8 @@ private:
 	QLabel *empty_hint_;
 	QLabel *resolution_;
 	QLabel *audio_note_;
+	QWidget *twitch_row_;
+	QLabel *twitch_status_;
 	QWidget *link_bar_;
 	QLabel *link_label_;
 	QComboBox *link_layout_;

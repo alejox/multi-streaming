@@ -32,6 +32,8 @@
 | 🔗 | **Linked scenes** | The vertical scene follows the horizontal one: it switches with OBS's program, and what you add, remove, move or hide there shows up here. Hand-made adjustments in vertical are kept. A vertical scene you built by hand can also follow a horizontal one, nothing imported |
 | 📐 | **Templates and focus** | Camera on top, Full screen or Big camera, plus a focus control for which part of the capture shows |
 | 🎚️ | **Per-destination resolution** | Each destination with custom encoding goes out at its own resolution (4K, 2K, 1080p, 720p) from the same canvas: 1440p to YouTube and 1080p to Kick at once |
+| 📺 | **Twitch Dual Format** | The vertical dock tells you whether your Twitch stream also goes out vertical (ready, live or off) and how to turn it on with Enhanced Broadcasting |
+| 🖥️ | **Large view** | A separate window with the vertical canvas as it goes out, to keep an eye on it while live |
 | 📲 | **Safe zones** | Shades in the preview where TikTok, Shorts and Reels put their buttons and captions |
 | 🎞️ | **Video source per destination** | Each destination sends the `main` mix or the `vertical` canvas |
 | ⚙️ | **Smart encoders** | Destinations share an encoder when their settings match, and get a dedicated one when they don't |
@@ -312,7 +314,7 @@ The manual collection cleanup has been tested once.
 
 | Check | Result |
 |-------|--------|
-| Core tests | ✅ 40 of 40 pass |
+| Core tests | ✅ 41 of 41 pass |
 | Plugin loads and unloads in OBS 33.0.1 (macOS) | ✅ Pass |
 | Main and vertical streaming together | ✅ Pass: 640x360 and 1080x1920 on local RTMP sinks |
 | Retries exhausted, closed port, exit while live | ✅ Pass, repeated runs |

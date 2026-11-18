@@ -234,7 +234,8 @@ void VerticalPreview::watch_top_level()
 
 void VerticalPreview::draw(void *data, uint32_t width, uint32_t height)
 {
-	static_cast<VerticalPreview *>(data)->target_->render(width, height);
+	auto *preview = static_cast<VerticalPreview *>(data);
+	preview->target_->render(width, height, !preview->monitor_);
 }
 
 QSize VerticalPreview::pixel_size() const

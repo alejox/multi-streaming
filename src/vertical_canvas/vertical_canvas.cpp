@@ -186,7 +186,7 @@ void VerticalPreviewTarget::clear()
 	set(nullptr, 0, 0);
 }
 
-void VerticalPreviewTarget::render(std::uint32_t window_width, std::uint32_t window_height)
+void VerticalPreviewTarget::render(std::uint32_t window_width, std::uint32_t window_height, bool with_overlay)
 {
 	const std::lock_guard<std::mutex> lock(mutex_);
 	if (!canvas_) {
@@ -209,7 +209,9 @@ void VerticalPreviewTarget::render(std::uint32_t window_width, std::uint32_t win
 	gs_projection_pop();
 	gs_viewport_pop();
 
-	draw_overlay(window_width, window_height);
+	if (with_overlay) {
+		draw_overlay(window_width, window_height);
+	}
 	++rendered_frames_;
 }
 
@@ -1837,6 +1839,12 @@ void VerticalCanvas::queue_relayout(const std::string &main_uuid)
 		}
 		notify();
 	});
+}
+
+std::string VerticalCanvas::canvas_uuid() const
+{
+	const char *uuid = canvas_ ? obs_canvas_get_uuid(canvas_) : nullptr;
+	return uuid != nullptr ? uuid : "";
 }
 
 } // namespace multistream

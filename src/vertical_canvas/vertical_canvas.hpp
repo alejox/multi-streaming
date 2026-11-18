@@ -52,7 +52,8 @@ public:
 	void set_overlay(const PreviewOverlay &overlay);
 
 	// Graphics thread, in a display's draw callback.
-	void render(std::uint32_t window_width, std::uint32_t window_height);
+	// with_overlay false draws only the canvas, as a monitor of what goes out.
+	void render(std::uint32_t window_width, std::uint32_t window_height, bool with_overlay = true);
 
 	std::uint64_t rendered_frames() const { return rendered_frames_; }
 
@@ -116,6 +117,8 @@ public:
 	bool attach();
 	void detach();
 	bool available() const { return static_cast<bool>(canvas_); }
+	// The canvas uuid OBS stores as the Enhanced Broadcasting additional canvas; empty without one.
+	std::string canvas_uuid() const;
 
 	// After a profile change or any main video reset: main's frame rate and format may be
 	// different now. Main video resets are also followed on their own, see video_reset.

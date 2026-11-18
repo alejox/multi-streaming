@@ -5,7 +5,9 @@
 #include "dock/vertical_preview.hpp"
 #include "vertical_canvas/source_icons.hpp"
 
+#include <obs-frontend-api.h>
 #include <obs-module.h>
+#include <util/config-file.h>
 
 #include <QComboBox>
 #include <QDialog>
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <iterator>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace multistream {
@@ -107,6 +110,16 @@ VerticalController::VerticalController(VerticalCanvas &canvas, StreamingEngine &
 		[this](std::int64_t id) { canvas_.open_item_properties(id); });
 	connect(dock, &VerticalDock::resolution_settings_requested, this, &VerticalController::edit_resolution);
 	connect(dock, &VerticalDock::import_menu_requested, this, &VerticalController::show_import_menu);
+	connect(dock, &VerticalDock::monitor_requested, this, &VerticalController::show_monitor);
+	connect(dock, &VerticalDock::twitch_help_requested, this, &VerticalController::show_twitch_help);
+	// OBS has no event for its stream settings changing, so the Twitch line is polled.
+	if (twitch_poll_ == nullptr) {
+		twitch_poll_ = new QTimer(this);
+		twitch_poll_->setInterval(2000);
+		connect(twitch_poll_, &QTimer::timeout, this, &VerticalController::refresh_twitch_dual_format);
+		twitch_poll_->start();
+	}
+	refresh_twitch_dual_format();
 	connect(dock, &VerticalDock::link_layout_changed, this, [this](int layout, double focus) {
 		if (layout >= 0 && layout < static_cast<int>(std::size(kAllTwinLayouts))) {
 			canvas_.set_active_link_layout(kAllTwinLayouts[layout], focus);
@@ -135,6 +148,8 @@ VerticalController::VerticalController(VerticalCanvas &canvas, StreamingEngine &
 VerticalController::~VerticalController()
 {
 	canvas_.set_changed_listener(nullptr);
+	// The monitor window has no parent; it goes before OBS shuts graphics down.
+	delete monitor_.data();
 	if (dock_) {
 		dock_->preview()->set_canvas(nullptr);
 		dock_->preview()->set_target(nullptr);
@@ -568,6 +583,67 @@ void VerticalController::change_resolution(int width, int height)
 		}
 		break;
 	}
+}
+
+void VerticalController::refresh_twitch_dual_format()
+{
+	if (!dock_) {
+		return;
+	}
+	TwitchDualFormatFacts facts;
+	if (obs_service_t *service = obs_frontend_get_streaming_service()) {
+		OBSDataAutoRelease settings = obs_service_get_settings(service);
+		const char *name = obs_data_get_string(settings, "service");
+		facts.service_is_twitch = name != nullptr && std::string_view(name) == "Twitch";
+	}
+	if (config_t *profile = obs_frontend_get_profile_config()) {
+		facts.enhanced_broadcasting = config_get_bool(profile, "Stream1", "EnableMultitrackVideo");
+		const char *extra = config_get_string(profile, "Stream1", "MultitrackExtraCanvas");
+		facts.additional_canvas_uuid = extra != nullptr ? extra : "";
+	}
+	facts.vertical_canvas_uuid = canvas_.canvas_uuid();
+	facts.streaming = obs_frontend_streaming_active();
+	dock_->set_twitch_dual_format(twitch_dual_format(facts));
+}
+
+void VerticalController::show_twitch_help()
+{
+	if (!dock_) {
+		return;
+	}
+	QMessageBox box(dock_);
+	box.setWindowTitle(text("Vertical.TwitchHelpTitle"));
+	box.setTextFormat(Qt::RichText);
+	box.setText(text("Vertical.TwitchHelpBody"));
+	box.setStandardButtons(QMessageBox::Ok);
+	box.exec();
+}
+
+// A window of its own showing the canvas as it goes out, for keeping an eye on it while live.
+void VerticalController::show_monitor()
+{
+	if (!dock_) {
+		return;
+	}
+	if (!monitor_) {
+		auto *window = new QWidget(nullptr, Qt::Window);
+		window->setAttribute(Qt::WA_DeleteOnClose);
+		window->setWindowTitle(text("Vertical.MonitorTitle"));
+		auto *layout = new QVBoxLayout(window);
+		layout->setContentsMargins(0, 0, 0, 0);
+		auto *view = new VerticalPreview(window);
+		view->set_monitor(true);
+		view->set_target(canvas_.preview_target());
+		layout->addWidget(view);
+		const CanvasSize size = canvas_.canvas_size();
+		const int height = 760;
+		const int width = size.height > 0 ? static_cast<int>(height * size.width / size.height) : 428;
+		window->resize(width, height);
+		monitor_ = window;
+	}
+	monitor_->show();
+	monitor_->raise();
+	monitor_->activateWindow();
 }
 
 } // namespace multistream

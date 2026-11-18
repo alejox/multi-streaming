@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QMenu>
 #include <QSlider>
+#include <QStyle>
 #include <QTimer>
 #include <QEvent>
 #include <QHBoxLayout>
@@ -72,6 +73,8 @@ VerticalDock::VerticalDock(QWidget *parent)
 	  empty_hint_(new QLabel(text("Vertical.EmptyHint"))),
 	  resolution_(new QLabel()),
 	  audio_note_(new QLabel()),
+	  twitch_row_(new QWidget()),
+	  twitch_status_(new QLabel()),
 	  link_bar_(new QWidget()),
 	  link_label_(new QLabel()),
 	  link_layout_(new QComboBox()),
@@ -135,10 +138,19 @@ VerticalDock::VerticalDock(QWidget *parent)
 	safe_zones->setAutoRaise(true);
 	connect(safe_zones, &QToolButton::toggled, this, &VerticalDock::safe_zones_toggled);
 
+	// What goes out, large and without editing marks, in a window of its own.
+	auto *monitor = new QToolButton();
+	monitor->setText(text("Vertical.Monitor"));
+	monitor->setToolTip(text("Vertical.MonitorHint"));
+	monitor->setAccessibleName(text("Vertical.Monitor"));
+	monitor->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	connect(monitor, &QToolButton::clicked, this, &VerticalDock::monitor_requested);
+
 	auto *status_row = new QHBoxLayout();
 	status_row->setContentsMargins(0, 0, 0, 0);
 	status_row->addWidget(import);
 	status_row->addWidget(safe_zones);
+	status_row->addWidget(monitor);
 	status_row->addStretch();
 	status_row->addWidget(resolution_);
 	status_row->addWidget(settings);
@@ -146,6 +158,7 @@ VerticalDock::VerticalDock(QWidget *parent)
 	auto *controls = new QVBoxLayout(controls_);
 	controls->setContentsMargins(0, 0, 0, 0);
 	controls->addLayout(status_row);
+	controls->addWidget(twitch_row_);
 	controls->addWidget(link_bar_);
 	controls->addWidget(empty_hint_);
 	controls->addWidget(message_);
@@ -212,6 +225,21 @@ VerticalDock::VerticalDock(QWidget *parent)
 		}
 	});
 	connect(link_layout_, &QComboBox::currentIndexChanged, this, send_layout);
+
+	// Twitch Dual Format: whether OBS's own Twitch stream carries this canvas.
+	twitch_status_->setTextFormat(Qt::PlainText);
+	twitch_status_->setWordWrap(true);
+	twitch_status_->setProperty("class", "text-small");
+	auto *twitch_help = new QToolButton();
+	twitch_help->setText(text("Vertical.TwitchHelp"));
+	twitch_help->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	twitch_help->setAutoRaise(true);
+	connect(twitch_help, &QToolButton::clicked, this, &VerticalDock::twitch_help_requested);
+	auto *twitch_layout = new QHBoxLayout(twitch_row_);
+	twitch_layout->setContentsMargins(0, 2, 0, 2);
+	twitch_layout->addWidget(twitch_status_, 1);
+	twitch_layout->addWidget(twitch_help);
+	twitch_row_->hide();
 
 	auto *outer = new QSplitter(Qt::Vertical);
 	outer->addWidget(preview_);
@@ -537,6 +565,29 @@ void VerticalDock::set_link(const std::optional<VerticalLinkView> &link)
 		link_focus_->setValue(static_cast<int>(std::lround(link->focus * 100.0)));
 	}
 	updating_ = false;
+}
+
+void VerticalDock::set_twitch_dual_format(TwitchDualFormat state)
+{
+	twitch_row_->setVisible(state != TwitchDualFormat::NotTwitch);
+	switch (state) {
+	case TwitchDualFormat::Live:
+		twitch_status_->setText(text("Vertical.TwitchLive"));
+		twitch_status_->setProperty("class", "text-small text-danger");
+		break;
+	case TwitchDualFormat::Ready:
+		twitch_status_->setText(text("Vertical.TwitchReady"));
+		twitch_status_->setProperty("class", "text-small text-success");
+		break;
+	case TwitchDualFormat::Off:
+		twitch_status_->setText(text("Vertical.TwitchOff"));
+		twitch_status_->setProperty("class", "text-small text-warning");
+		break;
+	case TwitchDualFormat::NotTwitch:
+		break;
+	}
+	twitch_status_->style()->unpolish(twitch_status_);
+	twitch_status_->style()->polish(twitch_status_);
 }
 
 } // namespace multistream

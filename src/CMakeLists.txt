@@ -46,6 +46,7 @@ add_library(
   update/update_settings.cpp
   vertical_canvas/auto_layout.cpp
   vertical_canvas/preview_geometry.cpp
+  vertical_canvas/twitch_dual_format.cpp
   vertical_canvas/source_catalog.cpp
   vertical_canvas/source_icons.cpp
 )

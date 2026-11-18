@@ -9,6 +9,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
 
 #include <string>
 #include <vector>
@@ -41,10 +42,15 @@ private:
 	void remove_scene(const QString &name);
 	void edit_resolution();
 	void show_import_menu(const QPoint &global_position);
+	void show_monitor();
+	void show_twitch_help();
+	void refresh_twitch_dual_format();
 
 	VerticalCanvas &canvas_;
 	StreamingEngine &engine_;
 	QPointer<VerticalDock> dock_;
+	QPointer<QWidget> monitor_;
+	QTimer *twitch_poll_ = nullptr;
 };
 
 } // namespace multistream
