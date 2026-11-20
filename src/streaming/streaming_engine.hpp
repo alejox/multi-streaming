@@ -48,6 +48,9 @@ struct DestinationStatus {
 	SessionState state = SessionState::Idle;
 	std::string failure_reason;
 	StreamStats stats;
+	// The size the video encoder sends, after any scaling; 0 while not on air.
+	std::uint32_t video_width = 0;
+	std::uint32_t video_height = 0;
 	std::uint64_t dropped_frames = 0;
 	// The retry in progress, from 1. 0 while connected.
 	int reconnect_attempt = 0;

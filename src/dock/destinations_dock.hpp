@@ -39,6 +39,8 @@ struct DestinationRowStatus {
 	QString warning_hint;
 	// Only while on air. Empty hides them.
 	QString bitrate;
+	// The exact output size, as a tooltip on the bitrate.
+	QString bitrate_hint;
 	QString dropped;
 	DropLevel drop_level = DropLevel::Normal;
 	bool can_start = false;

@@ -847,6 +847,13 @@ DestinationStatus StreamingEngine::status_of(const Slot &slot)
 	}
 	if (status.state == SessionState::Live || status.state == SessionState::Reconnecting) {
 		status.stats = slot.stats;
+		// What actually goes out, so a destination's resolution can be checked while live.
+		if (slot.link && slot.link->output) {
+			if (obs_encoder_t *video = obs_output_get_video_encoder(slot.link->output)) {
+				status.video_width = obs_encoder_get_width(video);
+				status.video_height = obs_encoder_get_height(video);
+			}
+		}
 	}
 	status.dropped_frames = slot.counters.dropped_frames;
 	return status;

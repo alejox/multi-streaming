@@ -416,6 +416,12 @@ DestinationRowStatus DockController::row_status(const DestinationStatus &status)
 	if (is_on_air(status.state)) {
 		const QLocale locale;
 		row.bitrate = text("Dock.StatsBitrate").arg(locale.toString(status.stats.bitrate_kbps, 'f', 0));
+		if (status.video_width > 0 && status.video_height > 0) {
+			// "1080p" by the short side, so a vertical 1080x1920 reads 1080p too.
+			const std::uint32_t short_side = std::min(status.video_width, status.video_height);
+			row.bitrate = text("Dock.StatsResolution").arg(short_side) + QStringLiteral(" \u00B7 ") + row.bitrate;
+			row.bitrate_hint = QStringLiteral("%1 \u00D7 %2").arg(status.video_width).arg(status.video_height);
+		}
 		row.dropped = text("Dock.StatsDropped").arg(locale.toString(status.stats.total_drop_percent, 'f', 1));
 		row.drop_level = drop_level(status.stats.total_drop_percent);
 	}

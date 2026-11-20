@@ -518,6 +518,7 @@ void DestinationsDock::apply_status(RowWidgets &widgets, const DestinationRowSta
 	const bool on_air = !status.bitrate.isEmpty();
 	// The separator stays with the bitrate so the drop figure can carry its own color.
 	widgets.bitrate->setText(status.bitrate + QStringLiteral(" \u00B7"));
+	widgets.bitrate->setToolTip(status.bitrate_hint);
 	widgets.bitrate->setVisible(on_air);
 	widgets.dropped->setText(status.dropped);
 	widgets.dropped->setVisible(on_air);
